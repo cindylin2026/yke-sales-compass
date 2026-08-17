@@ -7,11 +7,11 @@ import {
   Command as CommandIcon,
   Contact as ContactIcon,
   Home,
+  LogOut,
   Megaphone,
   MessagesSquare,
   Search,
   Target,
-  UserRound,
   Users,
 } from "lucide-react";
 import {
@@ -33,6 +33,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useCrm } from "@/lib/crm/provider";
+import { useAuth } from "@/lib/auth/context";
 import { bucketTasks, globalSearch, scopeForUser } from "@/lib/crm/selectors";
 import type { UserRole } from "@/lib/crm/types";
 
@@ -47,7 +48,8 @@ interface NavItem {
 const ALL: UserRole[] = ["sales_rep", "manager", "marketing", "admin"];
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { db, currentUser, setCurrentUserId } = useCrm();
+  const { db, currentUser } = useCrm();
+  const { signOut } = useAuth();
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const navigate = useNavigate();
@@ -140,17 +142,21 @@ export function AppShell({ children }: { children: ReactNode }) {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-64">
-              <DropdownMenuLabel>Switch view (same data, different lens)</DropdownMenuLabel>
+              <DropdownMenuLabel>
+                <p className="font-medium">{currentUser.full_name}</p>
+                <p className="text-xs font-normal text-muted-foreground">{currentUser.email}</p>
+                <p className="mt-0.5 text-xs font-normal text-muted-foreground capitalize">
+                  {currentUser.role.replace("_", " ")} · {currentUser.region}
+                </p>
+              </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              {db.users.map((u) => (
-                <DropdownMenuItem key={u.id} onSelect={() => setCurrentUserId(u.id)}>
-                  <UserRound className="size-4" />
-                  <span className="flex-1">{u.full_name}</span>
-                  <span className="text-xs text-muted-foreground capitalize">
-                    {u.role.replace("_", " ")}
-                  </span>
-                </DropdownMenuItem>
-              ))}
+              <DropdownMenuItem
+                onSelect={() => void signOut()}
+                className="text-destructive focus:text-destructive"
+              >
+                <LogOut className="size-4" />
+                Sign out
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

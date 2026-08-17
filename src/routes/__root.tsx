@@ -6,14 +6,18 @@ import {
   useRouter,
   HeadContent,
   Scripts,
+  useNavigate,
+  useRouterState,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { AuthProvider, useAuth } from "@/lib/auth/context";
 import { CrmProvider } from "@/lib/crm/provider";
 import { AppShell } from "@/components/crm/AppShell";
 import { Toaster } from "@/components/ui/sonner";
+import { Loader2 } from "lucide-react";
 
 function NotFoundComponent() {
   return (
@@ -126,18 +130,70 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+/** Auth guard — redirect unauthenticated users to /login.
+ *  During development / before Supabase migration is run,
+ *  set VITE_AUTH_REQUIRED=false in .env.local to bypass auth.
+ */
+const AUTH_REQUIRED = import.meta.env["VITE_AUTH_REQUIRED"] !== "false";
+
+function AuthGuard({ children }: { children: ReactNode }) {
+  const { session, loading } = useAuth();
+  const navigate = useNavigate();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const isLoginPage = pathname === "/login";
+
+  useEffect(() => {
+    if (!AUTH_REQUIRED) return;
+    if (!loading && !session && !isLoginPage) {
+      void navigate({ to: "/login" });
+    }
+  }, [loading, session, isLoginPage, navigate]);
+
+  // Skip loading spinner if auth is bypassed
+  if (AUTH_REQUIRED && loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="mb-3 flex items-center justify-center gap-2">
+            <span className="grid size-8 place-items-center rounded-lg bg-ember font-display text-xs font-bold text-ember-foreground">
+              YK
+            </span>
+            <span className="font-display text-sm font-semibold">Yo-Kai Express Sales OS</span>
+          </div>
+          <Loader2 className="mx-auto size-5 animate-spin text-muted-foreground" />
+          <p className="mt-2 text-xs text-muted-foreground">Loading…</p>
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const isLoginPage = pathname === "/login";
 
   return (
     <QueryClientProvider client={queryClient}>
-      <CrmProvider>
-        <AppShell>
-          {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-          <Outlet />
-        </AppShell>
-        <Toaster />
-      </CrmProvider>
+      <AuthProvider>
+        {isLoginPage ? (
+          <>
+            <Outlet />
+            <Toaster />
+          </>
+        ) : (
+          <AuthGuard>
+            <CrmProvider>
+              <AppShell>
+                <Outlet />
+              </AppShell>
+              <Toaster />
+            </CrmProvider>
+          </AuthGuard>
+        )}
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

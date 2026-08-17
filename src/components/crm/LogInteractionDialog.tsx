@@ -45,6 +45,7 @@ export function LogInteractionDialog({
   const [docUrl, setDocUrl] = useState("");
   const [summarize, setSummarize] = useState(false);
   const [createFollowUp, setCreateFollowUp] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   const reset = () => {
     setSubject("");
@@ -56,53 +57,60 @@ export function LogInteractionDialog({
     setSummarize(false);
   };
 
-  const submit = () => {
+  const submit = async () => {
     if (!subject.trim()) {
       toast.error("Give the interaction a subject.");
       return;
     }
-    const created = createInteraction({
-      type,
-      occurred_at: `${occurredOn}T12:00:00.000Z`,
-      owner_user_id: currentUser.id,
-      account_id: related.accountId ?? null,
-      contact_id: related.contactId ?? null,
-      lead_id: related.leadId ?? null,
-      opportunity_id: related.opportunityId ?? null,
-      subject: subject.trim(),
-      notes: notes.trim(),
-      next_steps: nextSteps.trim(),
-      next_action: nextAction.trim(),
-      next_action_due_date: dueDate || null,
-      source_doc_url: docUrl.trim() || null,
-      ai_summary: null,
-      ai_summary_status: docUrl.trim() && summarize ? "pending" : "none",
-    });
-
-    if (docUrl.trim() && summarize) requestAiSummary(created.id);
-
-    if (createFollowUp && nextAction.trim() && dueDate) {
-      createTask({
-        title: nextAction.trim(),
-        type: "Follow-up",
+    setSaving(true);
+    try {
+      const created = await createInteraction({
+        type,
+        occurred_at: `${occurredOn}T12:00:00.000Z`,
         owner_user_id: currentUser.id,
-        lead_id: related.leadId ?? null,
         account_id: related.accountId ?? null,
         contact_id: related.contactId ?? null,
+        lead_id: related.leadId ?? null,
         opportunity_id: related.opportunityId ?? null,
-        due_date: dueDate,
-        status: "Open",
+        subject: subject.trim(),
+        notes: notes.trim(),
+        next_steps: nextSteps.trim(),
         next_action: nextAction.trim(),
-        priority: "Normal",
-        completed_at: null,
+        next_action_due_date: dueDate || null,
+        source_doc_url: docUrl.trim() || null,
+        ai_summary: null,
+        ai_summary_status: docUrl.trim() && summarize ? "pending" : "none",
       });
-    }
 
-    toast.success("Interaction logged", {
-      description: createFollowUp && nextAction && dueDate ? "Follow-up task created too." : undefined,
-    });
-    reset();
-    setOpen(false);
+      if (docUrl.trim() && summarize) requestAiSummary(created.id);
+
+      if (createFollowUp && nextAction.trim() && dueDate) {
+        await createTask({
+          title: nextAction.trim(),
+          type: "Follow-up",
+          owner_user_id: currentUser.id,
+          lead_id: related.leadId ?? null,
+          account_id: related.accountId ?? null,
+          contact_id: related.contactId ?? null,
+          opportunity_id: related.opportunityId ?? null,
+          due_date: dueDate,
+          status: "Open",
+          next_action: nextAction.trim(),
+          priority: "Normal",
+          completed_at: null,
+        });
+      }
+
+      toast.success("Interaction logged", {
+        description: createFollowUp && nextAction && dueDate ? "Follow-up task created too." : undefined,
+      });
+      reset();
+      setOpen(false);
+    } catch (e) {
+      toast.error("Failed to log interaction", { description: (e as Error).message });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -192,7 +200,9 @@ export function LogInteractionDialog({
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={submit}>Log interaction</Button>
+          <Button onClick={() => void submit()} disabled={saving}>
+            {saving ? "Logging…" : "Log interaction"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

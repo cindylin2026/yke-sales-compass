@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ContactsRouteImport } from './routes/contacts'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as InteractionsRouteImport } from './routes/interactions'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as MarketingRouteImport } from './routes/marketing'
 import { Route as TasksRouteImport } from './routes/tasks'
 import { Route as AccountsIndexRouteImport } from './routes/accounts.index'
@@ -41,6 +42,11 @@ const DashboardRoute = DashboardRouteImport.update({
 const InteractionsRoute = InteractionsRouteImport.update({
   id: '/interactions',
   path: '/interactions',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MarketingRoute = MarketingRouteImport.update({
@@ -95,6 +101,7 @@ export interface FileRoutesByFullPath {
   '/contacts': typeof ContactsRoute
   '/dashboard': typeof DashboardRoute
   '/interactions': typeof InteractionsRoute
+  '/login': typeof LoginRoute
   '/marketing': typeof MarketingRoute
   '/tasks': typeof TasksRoute
   '/accounts/$accountId': typeof AccountsAccountIdRoute
@@ -110,6 +117,7 @@ export interface FileRoutesByTo {
   '/contacts': typeof ContactsRoute
   '/dashboard': typeof DashboardRoute
   '/interactions': typeof InteractionsRoute
+  '/login': typeof LoginRoute
   '/marketing': typeof MarketingRoute
   '/tasks': typeof TasksRoute
   '/accounts/$accountId': typeof AccountsAccountIdRoute
@@ -126,6 +134,7 @@ export interface FileRoutesById {
   '/contacts': typeof ContactsRoute
   '/dashboard': typeof DashboardRoute
   '/interactions': typeof InteractionsRoute
+  '/login': typeof LoginRoute
   '/marketing': typeof MarketingRoute
   '/tasks': typeof TasksRoute
   '/accounts/$accountId': typeof AccountsAccountIdRoute
@@ -143,6 +152,7 @@ export interface FileRouteTypes {
     | '/contacts'
     | '/dashboard'
     | '/interactions'
+    | '/login'
     | '/marketing'
     | '/tasks'
     | '/accounts/$accountId'
@@ -158,6 +168,7 @@ export interface FileRouteTypes {
     | '/contacts'
     | '/dashboard'
     | '/interactions'
+    | '/login'
     | '/marketing'
     | '/tasks'
     | '/accounts/$accountId'
@@ -173,6 +184,7 @@ export interface FileRouteTypes {
     | '/contacts'
     | '/dashboard'
     | '/interactions'
+    | '/login'
     | '/marketing'
     | '/tasks'
     | '/accounts/$accountId'
@@ -189,6 +201,7 @@ export interface RootRouteChildren {
   ContactsRoute: typeof ContactsRoute
   DashboardRoute: typeof DashboardRoute
   InteractionsRoute: typeof InteractionsRoute
+  LoginRoute: typeof LoginRoute
   MarketingRoute: typeof MarketingRoute
   TasksRoute: typeof TasksRoute
   AccountsAccountIdRoute: typeof AccountsAccountIdRoute
@@ -228,6 +241,13 @@ declare module '@tanstack/react-router' {
       path: '/interactions'
       fullPath: '/interactions'
       preLoaderRoute: typeof InteractionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/marketing': {
@@ -301,6 +321,7 @@ const rootRouteChildren: RootRouteChildren = {
   ContactsRoute: ContactsRoute,
   DashboardRoute: DashboardRoute,
   InteractionsRoute: InteractionsRoute,
+  LoginRoute: LoginRoute,
   MarketingRoute: MarketingRoute,
   TasksRoute: TasksRoute,
   AccountsAccountIdRoute: AccountsAccountIdRoute,
