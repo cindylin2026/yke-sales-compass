@@ -59,7 +59,7 @@ export interface LifecycleEvent {
   stage: LeadLifecycleStage;
   changed_at: ISODateTime;
   changed_by_user_id: ID;
-  note?: string;
+  note?: string | undefined;
 }
 
 export interface Lead {
@@ -67,26 +67,26 @@ export interface Lead {
   first_name: string;
   last_name: string;
   email: string;
-  phone?: string;
-  title?: string;
+  phone?: string | undefined;
+  title?: string | undefined;
   company_name: string;
-  company_domain?: string;
+  company_domain?: string | undefined;
   region: Region;
   source: LeadSource;
-  source_detail?: string;
-  campaign_id?: ID | null;
+  source_detail?: string | undefined;
+  campaign_id?: ID | null | undefined;
   lifecycle_stage: LeadLifecycleStage;
   lead_score: number; // 0-100 — how actionable is THIS prospect
   owner_user_id: ID | null;
-  notes?: string;
+  notes?: string | undefined;
   created_at: ISODateTime;
-  last_contacted_at?: ISODateTime | null;
+  last_contacted_at?: ISODateTime | null | undefined;
   lifecycle_history: LifecycleEvent[];
   // Conversion audit trail — the lead record is never deleted or copied.
-  converted_at?: ISODateTime | null;
-  converted_account_id?: ID | null;
-  converted_contact_id?: ID | null;
-  converted_opportunity_id?: ID | null;
+  converted_at?: ISODateTime | null | undefined;
+  converted_account_id?: ID | null | undefined;
+  converted_contact_id?: ID | null | undefined;
+  converted_opportunity_id?: ID | null | undefined;
 }
 
 export type AccountStatus =
@@ -109,18 +109,18 @@ export type AccountSegment =
 export interface Account {
   id: ID;
   name: string;
-  domain?: string;
+  domain?: string | undefined;
   segment: AccountSegment;
   region: Region;
   country: string;
-  city?: string;
+  city?: string | undefined;
   status: AccountStatus;
   account_fit_score: number; // 0-100 — ICP fit of the COMPANY
-  employee_count?: number;
-  locations_count?: number;
+  employee_count?: number | undefined;
+  locations_count?: number | undefined;
   owner_user_id: ID | null;
   created_at: ISODateTime;
-  notes?: string;
+  notes?: string | undefined;
 }
 
 export interface Contact {
@@ -128,12 +128,12 @@ export interface Contact {
   account_id: ID;
   first_name: string;
   last_name: string;
-  title?: string;
+  title?: string | undefined;
   email: string;
-  phone?: string;
+  phone?: string | undefined;
   is_primary: boolean;
   owner_user_id: ID | null;
-  originating_lead_id?: ID | null;
+  originating_lead_id?: ID | null | undefined;
   created_at: ISODateTime;
 }
 
@@ -157,11 +157,11 @@ export interface Opportunity {
   amount: number;
   probability: number; // 0-100
   expected_close_date: ISODate;
-  next_action?: string;
+  next_action?: string | undefined;
   region: Region;
-  originating_lead_id?: ID | null;
+  originating_lead_id?: ID | null | undefined;
   created_at: ISODateTime;
-  closed_at?: ISODateTime | null;
+  closed_at?: ISODateTime | null | undefined;
 }
 
 export type InteractionType =
@@ -188,19 +188,19 @@ export interface Interaction {
   type: InteractionType;
   occurred_at: ISODateTime;
   owner_user_id: ID | null;
-  account_id?: ID | null;
-  contact_id?: ID | null;
-  lead_id?: ID | null;
-  opportunity_id?: ID | null;
+  account_id?: ID | null | undefined;
+  contact_id?: ID | null | undefined;
+  lead_id?: ID | null | undefined;
+  opportunity_id?: ID | null | undefined;
   subject: string;
-  notes?: string;
-  next_steps?: string;
-  next_action?: string;
-  next_action_due_date?: ISODate | null;
+  notes?: string | undefined;
+  next_steps?: string | undefined;
+  next_action?: string | undefined;
+  next_action_due_date?: ISODate | null | undefined;
   /** Meeting notes doc — an AI summarizer will read this later. */
-  source_doc_url?: string | null;
-  ai_summary?: string | null;
-  ai_summary_status?: "none" | "pending" | "ready";
+  source_doc_url?: string | null | undefined;
+  ai_summary?: string | null | undefined;
+  ai_summary_status?: "none" | "pending" | "ready" | undefined;
   created_at: ISODateTime;
 }
 
@@ -230,16 +230,16 @@ export interface Task {
   title: string;
   type: TaskType;
   owner_user_id: ID | null;
-  lead_id?: ID | null;
-  account_id?: ID | null;
-  contact_id?: ID | null;
-  opportunity_id?: ID | null;
+  lead_id?: ID | null | undefined;
+  account_id?: ID | null | undefined;
+  contact_id?: ID | null | undefined;
+  opportunity_id?: ID | null | undefined;
   due_date: ISODate;
   status: TaskStatus;
-  next_action?: string;
+  next_action?: string | undefined;
   priority: "Low" | "Normal" | "High";
   created_at: ISODateTime;
-  completed_at?: ISODateTime | null;
+  completed_at?: ISODateTime | null | undefined;
 }
 
 export type CampaignChannel =
@@ -257,8 +257,8 @@ export interface Campaign {
   channel: CampaignChannel;
   region: Region | "Global";
   start_date: ISODate;
-  end_date?: ISODate | null;
-  budget?: number;
+  end_date?: ISODate | null | undefined;
+  budget?: number | undefined;
   is_active: boolean;
 }
 
