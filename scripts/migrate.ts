@@ -5,14 +5,37 @@
  *
  * Run with: bun run scripts/migrate.ts
  */
-import { readFileSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
-const SERVICE_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5yenp6ZmlmbHN1c2V0a3RrcHNyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4Njk5NDAwMywiZXhwIjoyMTAyNTcwMDAzfQ.2ZKGt_TYDkGrh-76W9P5JLc1YLTx7Sy2Bcf8CPWnvAc";
+const ROOT_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-const PROJECT_URL = "https://nrzzzfiflsusetktkpsr.supabase.co";
+function loadEnvLocal(): Record<string, string> {
+  const path = join(ROOT_DIR, ".env.local");
+  const env: Record<string, string> = {};
+  if (!existsSync(path)) return env;
+  for (const line of readFileSync(path, "utf-8").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq === -1) continue;
+    env[trimmed.slice(0, eq).trim()] = trimmed.slice(eq + 1).trim();
+  }
+  return env;
+}
+
+const env = { ...loadEnvLocal(), ...process.env };
+const SERVICE_KEY = env["SUPABASE_SERVICE_ROLE_KEY"];
+const PROJECT_URL = env["VITE_SUPABASE_URL"];
+
+if (!SERVICE_KEY || !PROJECT_URL) {
+  console.error(
+    "Missing SUPABASE_SERVICE_ROLE_KEY or VITE_SUPABASE_URL.\n" +
+    "Set them in .env.local (see .env.example) or as environment variables.",
+  );
+  process.exit(1);
+}
 
 // We'll run SQL via the PostgREST rpc call to a helper function.
 // Since we can't use Management API without sbp_ token,

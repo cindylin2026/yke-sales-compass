@@ -83,3 +83,55 @@ insert into leads (id, organization_id, first_name, last_name, email, phone, tit
   ('00000000-0000-0000-1ead-000000000018','00000000-0000-0000-0000-000000000001','Siddharth','Kapoor','s.kapoor@oberoihotels.com','+91-11-555-2018','Group Operations Director','The Oberoi Group','oberoihotels.com','Asia','LinkedIn','LinkedIn InMail','00000000-0000-0000-cafe-000000000002','MQL',77,'Luxury hotel group in India. 30+ properties. Strong interest.'),
   ('00000000-0000-0000-1ead-000000000019','00000000-0000-0000-0000-000000000001','Ashley','Turner','a.turner@hyve.com','+1-617-555-2019','Operations Analyst','Hyve Group','hyve.com','US','Wix Website Inquiry','Website inquiry','00000000-0000-0000-cafe-000000000003','New',51,'Low score, just exploring. Follow up in 2 weeks.'),
   ('00000000-0000-0000-1ead-000000000020','00000000-0000-0000-0000-000000000001','Daniel','Fox','d.fox@mgmresorts.com','+1-702-555-2020','SVP Food & Beverage','MGM Resorts International','mgmresorts.com','US','Event Registration','HITEC 2026','00000000-0000-0000-cafe-000000000001','SQL',91,'Top lead from HITEC. MGM has 30+ properties. Demo next Tuesday.');
+
+-- ── Lead stage history ────────────────────────────────────────
+insert into lead_stage_history (lead_id, old_stage, new_stage, changed_at) values
+  ('00000000-0000-0000-1ead-000000000001', null,  'New', now() - interval '45 days'),
+  ('00000000-0000-0000-1ead-000000000001', 'New', 'MQL', now() - interval '30 days'),
+  ('00000000-0000-0000-1ead-000000000001', 'MQL', 'SAL', now() - interval '20 days'),
+  ('00000000-0000-0000-1ead-000000000001', 'SAL', 'SQL', now() - interval '10 days'),
+  ('00000000-0000-0000-1ead-000000000004', null,  'New', now() - interval '35 days'),
+  ('00000000-0000-0000-1ead-000000000004', 'New', 'MQL', now() - interval '25 days'),
+  ('00000000-0000-0000-1ead-000000000004', 'MQL', 'SAL', now() - interval '12 days'),
+  ('00000000-0000-0000-1ead-000000000007', null,  'New', now() - interval '40 days'),
+  ('00000000-0000-0000-1ead-000000000007', 'New', 'MQL', now() - interval '28 days'),
+  ('00000000-0000-0000-1ead-000000000007', 'MQL', 'SAL', now() - interval '18 days'),
+  ('00000000-0000-0000-1ead-000000000007', 'SAL', 'SQL', now() - interval '8 days'),
+  ('00000000-0000-0000-1ead-000000000020', null,  'New', now() - interval '20 days'),
+  ('00000000-0000-0000-1ead-000000000020', 'New', 'MQL', now() - interval '14 days'),
+  ('00000000-0000-0000-1ead-000000000020', 'MQL', 'SAL', now() - interval '9 days'),
+  ('00000000-0000-0000-1ead-000000000020', 'SAL', 'SQL', now() - interval '4 days');
+
+-- ── Opportunities ─────────────────────────────────────────────
+insert into opportunities (id, organization_id, name, account_id, primary_contact_id, stage, amount, probability, expected_close_date, next_action, region) values
+  ('00000000-0000-0000-0bb0-000000000001','00000000-0000-0000-0000-000000000001','Hilton Pilot — 50 kiosks',      '00000000-0000-0000-acc0-000000000001','00000000-0000-0000-c0de-000000000001','Negotiation',480000,75,'2026-09-30','Finalize MSA terms',           'US'),
+  ('00000000-0000-0000-0bb0-000000000002','00000000-0000-0000-0000-000000000001','Marriott Phase 1 — 20 kiosks', '00000000-0000-0000-acc0-000000000002','00000000-0000-0000-c0de-000000000003','Proposal',   220000,50,'2026-10-15','Send revised proposal',        'US'),
+  ('00000000-0000-0000-0bb0-000000000003','00000000-0000-0000-0000-000000000001','SFO Terminal 3 Pilot',          '00000000-0000-0000-acc0-000000000003','00000000-0000-0000-c0de-000000000005','Discovery',   95000,25,'2026-11-30','Schedule site walk',           'US'),
+  ('00000000-0000-0000-0bb0-000000000004','00000000-0000-0000-0000-000000000001','UMich Campus Expansion',        '00000000-0000-0000-acc0-000000000004','00000000-0000-0000-c0de-000000000006','Proposal',   140000,45,'2026-10-01','ROI analysis deck due',        'US'),
+  ('00000000-0000-0000-0bb0-000000000005','00000000-0000-0000-0000-000000000001','Google Workplace 2027',         '00000000-0000-0000-acc0-000000000006','00000000-0000-0000-c0de-000000000007','Won',        320000,100,'2026-06-30','Deployment kickoff scheduled', 'US'),
+  ('00000000-0000-0000-0bb0-000000000006','00000000-0000-0000-0000-000000000001','7-Eleven Smart Kiosk Test',     '00000000-0000-0000-acc0-000000000007','00000000-0000-0000-c0de-000000000008','Discovery',   75000,20,'2026-12-15','Concept presentation',         'US'),
+  ('00000000-0000-0000-0bb0-000000000007','00000000-0000-0000-0000-000000000001','MBS Full Deployment',           '00000000-0000-0000-acc0-000000000009','00000000-0000-0000-c0de-000000000009','Won',        620000,100,'2026-05-31','Live — support only',          'Asia'),
+  ('00000000-0000-0000-0bb0-000000000008','00000000-0000-0000-0000-000000000001','Changi Terminal 1 Pilot',       '00000000-0000-0000-acc0-000000000010','00000000-0000-0000-c0de-000000000011','Negotiation',280000,70,'2026-09-15','Contract review with legal',   'Asia'),
+  ('00000000-0000-0000-0bb0-000000000009','00000000-0000-0000-0000-000000000001','NUS Campus Kiosk Program',      '00000000-0000-0000-acc0-000000000011','00000000-0000-0000-c0de-000000000012','Proposal',   165000,40,'2026-10-31','Awaiting procurement approval','Asia'),
+  ('00000000-0000-0000-0bb0-000000000010','00000000-0000-0000-0000-000000000001','Hyatt Chicago Pilot',           '00000000-0000-0000-acc0-000000000013','00000000-0000-0000-c0de-000000000013','Discovery',  110000,20,'2026-12-01','Initial discovery call',       'US'),
+  ('00000000-0000-0000-0bb0-000000000011','00000000-0000-0000-0000-000000000001','Compass Group Partnership',     '00000000-0000-0000-acc0-000000000014','00000000-0000-0000-c0de-000000000014','Lost',       500000,0, '2026-07-31',null,                          'US'),
+  ('00000000-0000-0000-0bb0-000000000012','00000000-0000-0000-0000-000000000001','Singapore Airlines Lounge',     '00000000-0000-0000-acc0-000000000015','00000000-0000-0000-c0de-000000000015','Proposal',   195000,45,'2026-11-15','Send premium lounge case study','Asia');
+
+update opportunities set closed_at = now() - interval '60 days' where id = '00000000-0000-0000-0bb0-000000000005';
+update opportunities set closed_at = now() - interval '30 days' where id = '00000000-0000-0000-0bb0-000000000007';
+update opportunities set closed_at = now() - interval '15 days' where id = '00000000-0000-0000-0bb0-000000000011';
+
+-- ── Interactions ─────────────────────────────────────────────
+insert into interactions (organization_id, type, occurred_at, account_id, contact_id, subject, notes, next_steps) values
+  ('00000000-0000-0000-0000-000000000001','Meeting', now()-interval '40 days','00000000-0000-0000-acc0-000000000001','00000000-0000-0000-c0de-000000000001','Hilton initial discovery call','Discussed kiosk needs across 3 properties. Strong fit.','Send capability deck'),
+  ('00000000-0000-0000-0000-000000000001','Email',   now()-interval '35 days','00000000-0000-0000-acc0-000000000001','00000000-0000-0000-c0de-000000000001','Capability deck sent to James','Deck sent. Awaiting feedback.','Follow up in 5 days'),
+  ('00000000-0000-0000-0000-000000000001','Call',    now()-interval '25 days','00000000-0000-0000-acc0-000000000001','00000000-0000-0000-c0de-000000000001','Follow-up call — Hilton proposal','James asked for ROI breakdown.','Prepare ROI model'),
+  ('00000000-0000-0000-0000-000000000001','Demo',    now()-interval '15 days','00000000-0000-0000-acc0-000000000001','00000000-0000-0000-c0de-000000000001','Hilton kiosk demo at McLean HQ','Very positive. Rachel joined. Want pilot in 2 properties.','Draft MSA'),
+  ('00000000-0000-0000-0000-000000000001','Meeting', now()-interval '30 days','00000000-0000-0000-acc0-000000000002','00000000-0000-0000-c0de-000000000003','Marriott intro meeting — Chicago','Michael interested. Wants to see case studies.','Send MBS case study'),
+  ('00000000-0000-0000-0000-000000000001','Email',   now()-interval '20 days','00000000-0000-0000-acc0-000000000002','00000000-0000-0000-c0de-000000000003','MBS case study shared with Marriott','Case study sent. Good initial feedback.','Schedule demo'),
+  ('00000000-0000-0000-0000-000000000001','Call',    now()-interval '5 days', '00000000-0000-0000-acc0-000000000002','00000000-0000-0000-c0de-000000000003','Marriott proposal call','Proposal reviewed. Questions on menu customization.','Revise proposal'),
+  ('00000000-0000-0000-0000-000000000001','Meeting', now()-interval '60 days','00000000-0000-0000-acc0-000000000009','00000000-0000-0000-c0de-000000000009','MBS site visit — kiosk placement','Mapped 8 kiosk locations across mall and hotel.','Submit floor plan'),
+  ('00000000-0000-0000-0000-000000000001','Demo',    now()-interval '45 days','00000000-0000-0000-acc0-000000000009','00000000-0000-0000-c0de-000000000009','MBS live kiosk demo','Demo successful. William confirmed green light.','Contract negotiation'),
+  ('00000000-0000-0000-0000-000000000001','Call',    now()-interval '10 days','00000000-0000-0000-acc0-000000000010','00000000-0000-0000-c0de-000000000011','Changi pilot scope call','Benjamin confirmed Terminal 1+2 scope. Budget approved.','Send contract'),
+  ('00000000-0000-0000-0000-000000000001','Email',   now()-interval '3 days', '00000000-0000-0000-acc0-000000000010','00000000-0000-0000-c0de-000000000011','Changi contract sent for review','Contract sent to Changi legal.','Follow up in 1 week'),
+  ('00000000-0000-0000-0000-000000000001','Meeting', now()-interval '8 days', '00000000-0000-0000-acc0-000000000003','00000000-0000-0000-c0de-000000000005','SFO discovery meeting','David gave tour of Terminal 3. High foot traffic.','Prepare site survey report');

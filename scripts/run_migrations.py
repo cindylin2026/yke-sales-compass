@@ -9,8 +9,27 @@ import urllib.error
 import sys
 import os
 
-SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5yenp6ZmlmbHN1c2V0a3RrcHNyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4Njk5NDAwMywiZXhwIjoyMTAyNTcwMDAzfQ.2ZKGt_TYDkGrh-76W9P5JLc1YLTx7Sy2Bcf8CPWnvAc"
-PROJECT_REF = "nrzzzfiflsusetktkpsr"
+def _load_env_local():
+    env = {}
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env.local")
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                env[k.strip()] = v.strip()
+    return env
+
+_env = {**_load_env_local(), **os.environ}
+SERVICE_KEY = _env.get("SUPABASE_SERVICE_ROLE_KEY")
+PROJECT_REF = _env.get("SUPABASE_PROJECT_REF")
+
+if not SERVICE_KEY or not PROJECT_REF:
+    print("Missing SUPABASE_SERVICE_ROLE_KEY or SUPABASE_PROJECT_REF.")
+    print("Set them in .env.local (see .env.example) or as environment variables.")
+    sys.exit(1)
 
 MIGRATIONS = [
     "supabase/migrations/001_schema.sql",
