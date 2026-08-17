@@ -10,33 +10,194 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ContactsRouteImport } from './routes/contacts'
+import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as InteractionsRouteImport } from './routes/interactions'
+import { Route as MarketingRouteImport } from './routes/marketing'
+import { Route as TasksRouteImport } from './routes/tasks'
+import { Route as AccountsIndexRouteImport } from './routes/accounts.index'
+import { Route as AccountsAccountIdRouteImport } from './routes/accounts.$accountId'
+import { Route as LeadsIndexRouteImport } from './routes/leads.index'
+import { Route as LeadsLeadIdRouteImport } from './routes/leads.$leadId'
+import { Route as LeadsNewRouteImport } from './routes/leads.new'
+import { Route as OpportunitiesIndexRouteImport } from './routes/opportunities.index'
+import { Route as OpportunitiesOpportunityIdRouteImport } from './routes/opportunities.$opportunityId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ContactsRoute = ContactsRouteImport.update({
+  id: '/contacts',
+  path: '/contacts',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InteractionsRoute = InteractionsRouteImport.update({
+  id: '/interactions',
+  path: '/interactions',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MarketingRoute = MarketingRouteImport.update({
+  id: '/marketing',
+  path: '/marketing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TasksRoute = TasksRouteImport.update({
+  id: '/tasks',
+  path: '/tasks',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountsIndexRoute = AccountsIndexRouteImport.update({
+  id: '/accounts/',
+  path: '/accounts/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountsAccountIdRoute = AccountsAccountIdRouteImport.update({
+  id: '/accounts/$accountId',
+  path: '/accounts/$accountId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LeadsIndexRoute = LeadsIndexRouteImport.update({
+  id: '/leads/',
+  path: '/leads/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LeadsLeadIdRoute = LeadsLeadIdRouteImport.update({
+  id: '/leads/$leadId',
+  path: '/leads/$leadId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LeadsNewRoute = LeadsNewRouteImport.update({
+  id: '/leads/new',
+  path: '/leads/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OpportunitiesIndexRoute = OpportunitiesIndexRouteImport.update({
+  id: '/opportunities/',
+  path: '/opportunities/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OpportunitiesOpportunityIdRoute =
+  OpportunitiesOpportunityIdRouteImport.update({
+    id: '/opportunities/$opportunityId',
+    path: '/opportunities/$opportunityId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/contacts': typeof ContactsRoute
+  '/dashboard': typeof DashboardRoute
+  '/interactions': typeof InteractionsRoute
+  '/marketing': typeof MarketingRoute
+  '/tasks': typeof TasksRoute
+  '/accounts/$accountId': typeof AccountsAccountIdRoute
+  '/leads/$leadId': typeof LeadsLeadIdRoute
+  '/leads/new': typeof LeadsNewRoute
+  '/opportunities/$opportunityId': typeof OpportunitiesOpportunityIdRoute
+  '/accounts/': typeof AccountsIndexRoute
+  '/leads/': typeof LeadsIndexRoute
+  '/opportunities/': typeof OpportunitiesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/contacts': typeof ContactsRoute
+  '/dashboard': typeof DashboardRoute
+  '/interactions': typeof InteractionsRoute
+  '/marketing': typeof MarketingRoute
+  '/tasks': typeof TasksRoute
+  '/accounts/$accountId': typeof AccountsAccountIdRoute
+  '/leads/$leadId': typeof LeadsLeadIdRoute
+  '/leads/new': typeof LeadsNewRoute
+  '/opportunities/$opportunityId': typeof OpportunitiesOpportunityIdRoute
+  '/accounts': typeof AccountsIndexRoute
+  '/leads': typeof LeadsIndexRoute
+  '/opportunities': typeof OpportunitiesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/contacts': typeof ContactsRoute
+  '/dashboard': typeof DashboardRoute
+  '/interactions': typeof InteractionsRoute
+  '/marketing': typeof MarketingRoute
+  '/tasks': typeof TasksRoute
+  '/accounts/$accountId': typeof AccountsAccountIdRoute
+  '/leads/$leadId': typeof LeadsLeadIdRoute
+  '/leads/new': typeof LeadsNewRoute
+  '/opportunities/$opportunityId': typeof OpportunitiesOpportunityIdRoute
+  '/accounts/': typeof AccountsIndexRoute
+  '/leads/': typeof LeadsIndexRoute
+  '/opportunities/': typeof OpportunitiesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/contacts'
+    | '/dashboard'
+    | '/interactions'
+    | '/marketing'
+    | '/tasks'
+    | '/accounts/$accountId'
+    | '/leads/$leadId'
+    | '/leads/new'
+    | '/opportunities/$opportunityId'
+    | '/accounts/'
+    | '/leads/'
+    | '/opportunities/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/contacts'
+    | '/dashboard'
+    | '/interactions'
+    | '/marketing'
+    | '/tasks'
+    | '/accounts/$accountId'
+    | '/leads/$leadId'
+    | '/leads/new'
+    | '/opportunities/$opportunityId'
+    | '/accounts'
+    | '/leads'
+    | '/opportunities'
+  id:
+    | '__root__'
+    | '/'
+    | '/contacts'
+    | '/dashboard'
+    | '/interactions'
+    | '/marketing'
+    | '/tasks'
+    | '/accounts/$accountId'
+    | '/leads/$leadId'
+    | '/leads/new'
+    | '/opportunities/$opportunityId'
+    | '/accounts/'
+    | '/leads/'
+    | '/opportunities/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ContactsRoute: typeof ContactsRoute
+  DashboardRoute: typeof DashboardRoute
+  InteractionsRoute: typeof InteractionsRoute
+  MarketingRoute: typeof MarketingRoute
+  TasksRoute: typeof TasksRoute
+  AccountsAccountIdRoute: typeof AccountsAccountIdRoute
+  LeadsLeadIdRoute: typeof LeadsLeadIdRoute
+  LeadsNewRoute: typeof LeadsNewRoute
+  OpportunitiesOpportunityIdRoute: typeof OpportunitiesOpportunityIdRoute
+  AccountsIndexRoute: typeof AccountsIndexRoute
+  LeadsIndexRoute: typeof LeadsIndexRoute
+  OpportunitiesIndexRoute: typeof OpportunitiesIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +209,107 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/contacts': {
+      id: '/contacts'
+      path: '/contacts'
+      fullPath: '/contacts'
+      preLoaderRoute: typeof ContactsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/interactions': {
+      id: '/interactions'
+      path: '/interactions'
+      fullPath: '/interactions'
+      preLoaderRoute: typeof InteractionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/marketing': {
+      id: '/marketing'
+      path: '/marketing'
+      fullPath: '/marketing'
+      preLoaderRoute: typeof MarketingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tasks': {
+      id: '/tasks'
+      path: '/tasks'
+      fullPath: '/tasks'
+      preLoaderRoute: typeof TasksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/accounts/': {
+      id: '/accounts/'
+      path: '/accounts'
+      fullPath: '/accounts/'
+      preLoaderRoute: typeof AccountsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/accounts/$accountId': {
+      id: '/accounts/$accountId'
+      path: '/accounts/$accountId'
+      fullPath: '/accounts/$accountId'
+      preLoaderRoute: typeof AccountsAccountIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/leads/': {
+      id: '/leads/'
+      path: '/leads'
+      fullPath: '/leads/'
+      preLoaderRoute: typeof LeadsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/leads/$leadId': {
+      id: '/leads/$leadId'
+      path: '/leads/$leadId'
+      fullPath: '/leads/$leadId'
+      preLoaderRoute: typeof LeadsLeadIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/leads/new': {
+      id: '/leads/new'
+      path: '/leads/new'
+      fullPath: '/leads/new'
+      preLoaderRoute: typeof LeadsNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/opportunities/': {
+      id: '/opportunities/'
+      path: '/opportunities'
+      fullPath: '/opportunities/'
+      preLoaderRoute: typeof OpportunitiesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/opportunities/$opportunityId': {
+      id: '/opportunities/$opportunityId'
+      path: '/opportunities/$opportunityId'
+      fullPath: '/opportunities/$opportunityId'
+      preLoaderRoute: typeof OpportunitiesOpportunityIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ContactsRoute: ContactsRoute,
+  DashboardRoute: DashboardRoute,
+  InteractionsRoute: InteractionsRoute,
+  MarketingRoute: MarketingRoute,
+  TasksRoute: TasksRoute,
+  AccountsAccountIdRoute: AccountsAccountIdRoute,
+  LeadsLeadIdRoute: LeadsLeadIdRoute,
+  LeadsNewRoute: LeadsNewRoute,
+  OpportunitiesOpportunityIdRoute: OpportunitiesOpportunityIdRoute,
+  AccountsIndexRoute: AccountsIndexRoute,
+  LeadsIndexRoute: LeadsIndexRoute,
+  OpportunitiesIndexRoute: OpportunitiesIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
