@@ -264,7 +264,8 @@ for row in accounts_raw:
         notes_parts.append("Foot traffic: " + str(row["Foot Traffic / Demand Density"]).strip())
     notes = " | ".join(notes_parts) if notes_parts else ""
 
-    created = sqdate(row.get("Date", "")) or "now()"
+    created_raw = sqdate(row.get("Date", ""))
+    created = created_raw if created_raw != "null" else "now()"
 
     account_rows.append(
         f"  ('{uid}', '{ORG_ID}', {sq(name)}, {sq(domain)}, {sq(website)}, "
@@ -345,8 +346,7 @@ for row in valid_interactions:
 
     itype    = clean_interaction_type(row.get("Interaction Type", ""))
     date_val = sqdate(row.get("Date", ""))
-    occurred = date_val if date_val != "null" else "now()"
-    occurred_ts = occurred.rstrip("'") + " 09:00:00+00'" if occurred != "now()" else "now()"
+    occurred_ts = (date_val.rstrip("'") + " 09:00:00+00'" if date_val != "null" else "now()")
 
     # Build subject from type + account
     subject = f"{itype} — {acc_name}"
