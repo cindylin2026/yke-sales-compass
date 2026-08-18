@@ -17,6 +17,13 @@ import re
 import uuid
 from datetime import datetime
 
+# Deterministic UUID v5 — same input always gives same UUID
+NAMESPACE = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")  # DNS namespace
+
+def stable_uuid(key: str) -> str:
+    """Generate a stable UUID from a string key (account name, contact id, etc.)"""
+    return str(uuid.uuid5(NAMESPACE, f"yke:{key}"))
+
 BASE = os.path.join(os.path.expanduser("~"), "Downloads",
                     "YKE Location & Partner Evaluation Framework - ")
 OUT  = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -183,14 +190,14 @@ account_uuid: dict[str, str] = {}
 for row in accounts_raw:
     name = str(row.get("Account Name", "")).strip()
     if name:
-        account_uuid[name] = str(uuid.uuid4())
+        account_uuid[name] = stable_uuid(f"account:{name}")
 
 # contact csv_id → uuid  (Contact ID is "1", "2" etc.)
 contact_uuid: dict[str, str] = {}
 for row in contacts_raw:
     cid = str(row.get("Contact ID", "")).strip()
     if cid:
-        contact_uuid[cid] = str(uuid.uuid4())
+        contact_uuid[cid] = stable_uuid(f"contact:{cid}")
 
 print(f"\nUnique accounts: {len(account_uuid)}")
 print(f"Unique contacts: {len(contact_uuid)}")
@@ -274,7 +281,7 @@ for row in accounts_raw:
         f"{emp}, {sq(notes)}, {created}, {created})"
     )
 
-w(",\n".join(account_rows) + ";")
+w(",\n".join(account_rows) + "\nON CONFLICT (id) DO NOTHING;")
 w()
 
 # ── CONTACTS ──────────────────────────────────────────────────────────────────
@@ -312,7 +319,7 @@ for row in contacts_raw:
         f"{sq(phone)}, {sq(row.get('Person Linkedin Url',''))}, false, now(), now())"
     )
 
-w(",\n".join(contact_rows) + ";")
+w(",\n".join(contact_rows) + "\nON CONFLICT (id) DO NOTHING;")
 w()
 
 # Mark one contact per account as primary
@@ -373,7 +380,7 @@ for row in valid_interactions:
         f"{sq(subject)}, {sq(notes)}, {sq(next_step)}, {sq(doc_url)}, now(), now())"
     )
 
-w(",\n".join(interaction_rows) + ";")
+w(",\n".join(interaction_rows) + "\nON CONFLICT DO NOTHING;")
 w()
 
 # ── Also create contacts from Master Database primary contact columns ─────────
@@ -408,7 +415,7 @@ for row in accounts_raw:
         seen_emails.add(email)
     phone = (str(row.get("Mobile", "")).strip() or
              str(row.get("Company Phone", "")).strip())
-    new_uid = str(uuid.uuid4())
+    new_uid = stable_uuid(f"master-contact:{acc_name}:{fn}:{ln}:{email}")
     extra_contact_rows.append(
         f"  ('{new_uid}', '{ORG_ID}', '{acc_uuid}', {sq(fn)}, {sq(ln)}, "
         f"{sq(row.get('Title',''))}, {sq(email)}, {sq(phone)}, "
@@ -416,7 +423,7 @@ for row in accounts_raw:
     )
 
 if extra_contact_rows:
-    w(",\n".join(extra_contact_rows) + ";")
+    w(",\n".join(extra_contact_rows) + "\nON CONFLICT (id) DO NOTHING;")
 else:
     w("-- (no extra contacts to add)")
 w()
