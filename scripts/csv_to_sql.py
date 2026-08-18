@@ -18,10 +18,9 @@ import uuid
 from datetime import datetime
 
 # Deterministic UUID v5 — same input always gives same UUID
-NAMESPACE = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")  # DNS namespace
+NAMESPACE = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
 
 def stable_uuid(key: str) -> str:
-    """Generate a stable UUID from a string key (account name, contact id, etc.)"""
     return str(uuid.uuid5(NAMESPACE, f"yke:{key}"))
 
 BASE = os.path.join(os.path.expanduser("~"), "Downloads",
@@ -31,34 +30,21 @@ OUT  = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
 
 ORG_ID = "00000000-0000-0000-0000-000000000001"
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+# ── helpers ───────────────────────────────────────────────────────────────────
 
 def sq(v):
-    """Escape a string value for SQL single-quote literals."""
     if v is None or str(v).strip() == "":
         return "null"
     return "'" + str(v).replace("'", "''").strip() + "'"
 
-def sqf(v):
-    """Numeric or null."""
-    s = str(v).strip() if v else ""
-    s = re.sub(r"[,$%]", "", s)
-    try:
-        return str(float(s)) if s else "null"
-    except ValueError:
-        return "null"
-
 def sqi(v):
-    """Integer or null."""
-    s = str(v).strip() if v else ""
-    s = re.sub(r"[,$ ]", "", s)
+    s = re.sub(r"[,$ ]", "", str(v).strip()) if v else ""
     try:
         return str(int(float(s))) if s else "null"
     except ValueError:
         return "null"
 
 def sqdate(v):
-    """Date string → SQL date or null."""
     if not v or str(v).strip() == "":
         return "null"
     s = str(v).strip()
@@ -71,22 +57,14 @@ def sqdate(v):
 
 def clean_segment(vertical):
     mapping = {
-        "hospitality": "Hotel",
-        "hotel": "Hotel",
+        "hospitality": "Hotel", "hotel": "Hotel",
         "airport": "Airport",
-        "university": "University",
-        "college": "University",
-        "hospital": "Hospital",
-        "healthcare": "Hospital",
-        "medical": "Hospital",
-        "corporate": "Office / Corporate",
-        "office": "Office / Corporate",
-        "convenience": "Convenience Retail",
-        "retail": "Convenience Retail",
+        "university": "University", "college": "University",
+        "hospital": "Hospital", "healthcare": "Hospital", "medical": "Hospital",
+        "corporate": "Office / Corporate", "office": "Office / Corporate",
+        "convenience": "Convenience Retail", "retail": "Convenience Retail",
         "distributor": "Distributor",
-        "entertainment": "Entertainment",
-        "casino": "Entertainment",
-        "arena": "Entertainment",
+        "entertainment": "Entertainment", "casino": "Entertainment", "arena": "Entertainment",
     }
     v = str(vertical).lower().strip() if vertical else ""
     for k, seg in mapping.items():
@@ -95,81 +73,31 @@ def clean_segment(vertical):
     return "Office / Corporate"
 
 def clean_region(city_or_country):
-    """Infer US vs Asia from country or city."""
-    asia_keywords = [
-        "singapore", "china", "japan", "korea", "taiwan", "hong kong",
-        "malaysia", "thailand", "vietnam", "indonesia", "india", "sg",
-        "cn", "jp", "kr", "tw", "hk", "my", "th", "vn", "id", "in",
-    ]
+    asia_kw = ["singapore","china","japan","korea","taiwan","hong kong","malaysia",
+               "thailand","vietnam","indonesia","india"," sg"," cn"," jp"," kr"," tw"]
     s = str(city_or_country).lower() if city_or_country else ""
-    return "Asia" if any(k in s for k in asia_keywords) else "US"
+    return "Asia" if any(k in s for k in asia_kw) else "US"
 
 def clean_status(stage):
-    mapping = {
-        "target": "Target",
-        "prospect": "Active Prospect",
-        "active prospect": "Active Prospect",
-        "customer": "Customer",
-        "on hold": "On Hold",
-        "churned": "Churned",
-    }
     s = str(stage).lower().strip() if stage else ""
-    for k, v in mapping.items():
-        if k in s:
-            return v
+    if "prospect" in s or "active" in s: return "Active Prospect"
+    if "customer" in s: return "Customer"
+    if "hold" in s: return "On Hold"
+    if "churn" in s: return "Churned"
     return "Target"
 
-def clean_source(src):
-    valid = [
-        "Wix Website Inquiry", "Event Registration", "Trade Show", "LinkedIn",
-        "Social Media", "Referral", "Partner", "Outbound", "Manual Entry", "Other Campaign",
-    ]
-    s = str(src).strip() if src else ""
-    s_low = s.lower()
-    if "wix" in s_low or "website" in s_low:
-        return "Wix Website Inquiry"
-    if "event" in s_low or "conference" in s_low:
-        return "Event Registration"
-    if "trade show" in s_low or "tradeshow" in s_low:
-        return "Trade Show"
-    if "linkedin" in s_low:
-        return "LinkedIn"
-    if "social" in s_low:
-        return "Social Media"
-    if "referral" in s_low:
-        return "Referral"
-    if "partner" in s_low:
-        return "Partner"
-    if "outbound" in s_low or "cold" in s_low:
-        return "Outbound"
-    for v in valid:
-        if v.lower() == s_low:
-            return v
-    return "Manual Entry"
-
 def clean_interaction_type(t):
-    valid = ["Email", "Call", "Meeting", "Demo", "LinkedIn", "Event", "Other"]
-    s = str(t).strip() if t else ""
-    for v in valid:
-        if v.lower() == s.lower():
-            return v
-    if "call" in s.lower():
-        return "Call"
-    if "meet" in s.lower() or "visit" in s.lower():
-        return "Meeting"
-    if "email" in s.lower():
-        return "Email"
-    if "demo" in s.lower():
-        return "Demo"
-    if "linkedin" in s.lower():
-        return "LinkedIn"
-    if "event" in s.lower():
-        return "Event"
+    s = str(t).strip().lower() if t else ""
+    if "call" in s: return "Call"
+    if "meet" in s or "visit" in s: return "Meeting"
+    if "email" in s: return "Email"
+    if "demo" in s: return "Demo"
+    if "linkedin" in s: return "LinkedIn"
+    if "event" in s: return "Event"
     return "Other"
 
 def read_csv(name):
-    path = BASE + name + ".csv"
-    with open(path, encoding="utf-8-sig") as f:
+    with open(BASE + name + ".csv", encoding="utf-8-sig") as f:
         return list(csv.DictReader(f))
 
 # ── load CSVs ─────────────────────────────────────────────────────────────────
@@ -185,27 +113,39 @@ print(f"  Interactions: {len(interactions_raw)}")
 
 # ── build UUID maps ───────────────────────────────────────────────────────────
 
-# account_name → uuid
+# Build account UUID map from Master DB
 account_uuid: dict[str, str] = {}
 for row in accounts_raw:
     name = str(row.get("Account Name", "")).strip()
-    if name:
-        account_uuid[name] = stable_uuid(f"account:{name}")
+    key  = name if name else "-"
+    account_uuid[key] = stable_uuid(f"account:{key}")
 
-# contact csv_id → uuid  (Contact ID is "1", "2" etc.)
+# Also add any account names that appear in Contacts/Interactions but NOT in Master DB
+for row in contacts_raw:
+    acc = str(row.get("Account Name", "")).strip()
+    key = acc if acc else "-"
+    if key not in account_uuid:
+        account_uuid[key] = stable_uuid(f"account:{key}")
+
+for row in interactions_raw:
+    acc = str(row.get("Account Name", "")).strip()
+    key = acc if acc else "-"
+    if key not in account_uuid:
+        account_uuid[key] = stable_uuid(f"account:{key}")
+
+# Contact ID → UUID
 contact_uuid: dict[str, str] = {}
 for row in contacts_raw:
     cid = str(row.get("Contact ID", "")).strip()
     if cid:
         contact_uuid[cid] = stable_uuid(f"contact:{cid}")
 
-print(f"\nUnique accounts: {len(account_uuid)}")
+print(f"\nTotal unique accounts (incl. contacts-only): {len(account_uuid)}")
 print(f"Unique contacts: {len(contact_uuid)}")
 
 # ── generate SQL ──────────────────────────────────────────────────────────────
 
 lines = []
-
 def w(*args):
     lines.append(" ".join(str(a) for a in args))
 
@@ -213,10 +153,9 @@ w("-- ============================================================")
 w("-- YKE Sales Compass — Real CSV Data Import")
 w("-- Migration 006: Converted from AppSheet CSV exports")
 w(f"-- Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-w("-- Run AFTER 001-005 migrations")
+w("-- ALL rows imported; missing fields marked with '-'")
 w("-- ============================================================")
 w()
-w("-- Clear any existing data (006 replaces 005 real data)")
 w("delete from audit_logs;")
 w("delete from opportunity_stage_history;")
 w("delete from lead_stage_history;")
@@ -230,18 +169,16 @@ w("delete from campaigns;")
 w()
 
 # ── ACCOUNTS ──────────────────────────────────────────────────────────────────
-w("-- ── Accounts (" + str(len(account_uuid)) + " rows) ──────────────────────────────────────────")
-w("insert into accounts")
-w("  (id, organization_id, name, domain, website, segment, region, country, city, full_address,")
-w("   status, account_fit_score, employee_count, notes, created_at, updated_at)")
-w("values")
-
+# First pass: master DB rows (full data)
 account_rows = []
+master_db_names: set[str] = set()
+
 for row in accounts_raw:
-    name = str(row.get("Account Name", "")).strip()
-    if not name:
-        continue
+    raw_name = str(row.get("Account Name", "")).strip()
+    name = raw_name if raw_name else "-"
+    master_db_names.add(name)
     uid = account_uuid[name]
+
     website = str(row.get("Website", "")).strip()
     domain = ""
     if website:
@@ -254,12 +191,9 @@ for row in accounts_raw:
     segment = clean_segment(row.get("Vertical", ""))
     status  = clean_status(row.get("Pipeline Stage", ""))
 
-    score_raw = row.get("Total Score", "") or ""
-    score_str = re.sub(r"[^0-9.]", "", str(score_raw))
+    score_str = re.sub(r"[^0-9.]", "", str(row.get("Total Score", "") or ""))
     try:
-        raw_score = float(score_str)
-        # Rubric max is 30 (6 metrics × 5), normalise to 0-100
-        fit_score = min(100, max(0, round(raw_score / 30 * 100))) if raw_score else 50
+        fit_score = min(100, max(0, round(float(score_str) / 30 * 100))) if score_str else 50
     except ValueError:
         fit_score = 50
 
@@ -269,164 +203,157 @@ for row in accounts_raw:
         notes_parts.append(str(row["Recommendation"]).strip())
     if row.get("Foot Traffic / Demand Density"):
         notes_parts.append("Foot traffic: " + str(row["Foot Traffic / Demand Density"]).strip())
-    notes = " | ".join(notes_parts) if notes_parts else ""
+    notes = " | ".join(notes_parts)
 
     created_raw = sqdate(row.get("Date", ""))
     created = created_raw if created_raw != "null" else "now()"
 
     account_rows.append(
         f"  ('{uid}', '{ORG_ID}', {sq(name)}, {sq(domain)}, {sq(website)}, "
-        f"{sq(segment)}, {sq(region)}, {sq(country)}, {sq(city)}, "
+        f"{sq(segment)}, {sq(region)}, {sq(country or '-')}, {sq(city or '-')}, "
         f"{sq(row.get('Full Address',''))}, {sq(status)}, {fit_score}, "
         f"{emp}, {sq(notes)}, {created}, {created})"
     )
 
+# Second pass: accounts referenced in Contacts/Interactions but NOT in Master DB
+extra_account_count = 0
+for acc_name, uid in account_uuid.items():
+    if acc_name in master_db_names:
+        continue
+    # These are "unknown" accounts — use '-' for required fields
+    account_rows.append(
+        f"  ('{uid}', '{ORG_ID}', {sq(acc_name)}, null, null, "
+        f"'Office / Corporate', 'US', '-', '-', null, 'Target', 50, "
+        f"null, 'Imported from contacts/interactions — account details unknown', now(), now())"
+    )
+    extra_account_count += 1
+
+w(f"-- ── Accounts ({len(account_rows)} rows: {len(master_db_names)} from Master DB + {extra_account_count} from contacts/interactions)")
+w("insert into accounts")
+w("  (id, organization_id, name, domain, website, segment, region, country, city, full_address,")
+w("   status, account_fit_score, employee_count, notes, created_at, updated_at)")
+w("values")
 w(",\n".join(account_rows) + "\nON CONFLICT (id) DO NOTHING;")
 w()
 
 # ── CONTACTS ──────────────────────────────────────────────────────────────────
-w("-- ── Contacts (" + str(len(contacts_raw)) + " rows) ──────────────────────────────────────────")
-w("insert into contacts")
-w("  (id, organization_id, account_id, first_name, last_name, title,")
-w("   email, phone, linkedin_url, is_primary, created_at, updated_at)")
-w("values")
-
 contact_rows = []
 for row in contacts_raw:
     cid = str(row.get("Contact ID", "")).strip()
     if not cid:
         continue
     uid = contact_uuid[cid]
-    acc_name = str(row.get("Account Name", "")).strip()
-    acc_uuid = account_uuid.get(acc_name)
-    if not acc_uuid:
-        # Account not in master DB — skip contact to avoid FK violation
-        continue
 
-    fn = str(row.get("First Name", "")).strip()
-    ln = str(row.get("Last Name", "")).strip()
-    if not fn and not ln:
-        continue
-    if not ln:
-        ln = "-"  # last_name is NOT NULL in schema
+    raw_acc = str(row.get("Account Name", "")).strip()
+    acc_key = raw_acc if raw_acc else "-"
+    acc_id  = account_uuid[acc_key]  # always exists now
+
+    fn = str(row.get("First Name", "")).strip() or "-"
+    ln = str(row.get("Last Name", "")).strip() or "-"
 
     phone = (str(row.get("Mobile", "")).strip() or
              str(row.get("Company Phone", "")).strip())
 
     contact_rows.append(
-        f"  ('{uid}', '{ORG_ID}', '{acc_uuid}', {sq(fn)}, {sq(ln)}, "
+        f"  ('{uid}', '{ORG_ID}', '{acc_id}', {sq(fn)}, {sq(ln)}, "
         f"{sq(row.get('Title',''))}, {sq(row.get('Email',''))}, "
         f"{sq(phone)}, {sq(row.get('Person Linkedin Url',''))}, false, now(), now())"
     )
 
-w(",\n".join(contact_rows) + "\nON CONFLICT (id) DO NOTHING;")
-w()
-
-# Mark one contact per account as primary
-w("-- Mark first contact per account as primary")
-w("""update contacts c
-set is_primary = true
-where c.id in (
-  select distinct on (account_id) id
-  from contacts
-  where account_id is not null
-  order by account_id, created_at
-);""")
-w()
-
-# ── INTERACTIONS ──────────────────────────────────────────────────────────────
-valid_interactions = [r for r in interactions_raw if r.get("Account Name", "").strip()]
-w("-- ── Interactions (" + str(len(valid_interactions)) + " rows) ──────────────────────────────────")
-w("insert into interactions")
-w("  (organization_id, type, occurred_at, account_id, contact_id,")
-w("   subject, notes, next_steps, google_doc_url, created_at, updated_at)")
-w("values")
-
-interaction_rows = []
-for row in valid_interactions:
-    acc_name = str(row.get("Account Name", "")).strip()
-    acc_uuid = account_uuid.get(acc_name)
-    if not acc_uuid:
-        continue
-
-    cid = str(row.get("Contact ID", "")).strip()
-    con_uuid = contact_uuid.get(cid) if cid else None
-    con_val  = f"'{con_uuid}'" if con_uuid else "null"
-
-    itype    = clean_interaction_type(row.get("Interaction Type", ""))
-    date_val = sqdate(row.get("Date", ""))
-    occurred_ts = (date_val.rstrip("'") + " 09:00:00+00'" if date_val != "null" else "now()")
-
-    # Build subject from type + account
-    subject = f"{itype} — {acc_name}"
-
-    # Notes: combine Notes + machine qty context
-    notes_parts = []
-    if row.get("Notes"):
-        notes_parts.append(str(row["Notes"]).strip())
-    boba = str(row.get("Boba Machine Qty", "")).strip()
-    ramen = str(row.get("Ramen Machine Qty", "")).strip()
-    tcv = str(row.get("YKE Opportunity Size (36-Mo TCV)", "")).strip()
-    if boba:  notes_parts.append(f"Boba machines: {boba}")
-    if ramen: notes_parts.append(f"Ramen machines: {ramen}")
-    if tcv:   notes_parts.append(f"TCV: {tcv}")
-    notes = " | ".join(notes_parts)
-
-    next_step = str(row.get("Next Step", "")).strip()
-    doc_url   = str(row.get("Gemini Doc URL", "")).strip()
-
-    interaction_rows.append(
-        f"  ('{ORG_ID}', {sq(itype)}, {occurred_ts}, '{acc_uuid}', {con_val}, "
-        f"{sq(subject)}, {sq(notes)}, {sq(next_step)}, {sq(doc_url)}, now(), now())"
-    )
-
-w(",\n".join(interaction_rows) + "\nON CONFLICT DO NOTHING;")
-w()
-
-# ── Also create contacts from Master Database primary contact columns ─────────
-# These are the "legacy/denormalized" contacts in the accounts sheet
-w("-- ── Extra contacts from Master Database primary contact columns ──────────")
+w(f"-- ── Contacts ({len(contact_rows)} rows)")
 w("insert into contacts")
 w("  (id, organization_id, account_id, first_name, last_name, title,")
 w("   email, phone, linkedin_url, is_primary, created_at, updated_at)")
 w("values")
+w(",\n".join(contact_rows) + "\nON CONFLICT (id) DO NOTHING;")
+w()
 
-extra_contact_rows = []
+# Mark first contact per account as primary
+w("update contacts set is_primary = true where id in (")
+w("  select distinct on (account_id) id from contacts")
+w("  where account_id is not null order by account_id, created_at")
+w(");")
+w()
+
+# ── INTERACTIONS ──────────────────────────────────────────────────────────────
+interaction_rows = []
+for row in interactions_raw:
+    raw_acc = str(row.get("Account Name", "")).strip()
+    acc_key = raw_acc if raw_acc else "-"
+    acc_id  = account_uuid[acc_key]  # always exists now
+
+    cid      = str(row.get("Contact ID", "")).strip()
+    con_val  = f"'{contact_uuid[cid]}'" if cid and cid in contact_uuid else "null"
+
+    itype    = clean_interaction_type(row.get("Interaction Type", ""))
+    date_val = sqdate(row.get("Date", ""))
+    occurred = (date_val.rstrip("'") + " 09:00:00+00'" if date_val != "null" else "now()")
+
+    subject  = f"{itype} — {acc_key}"
+
+    notes_parts = []
+    if row.get("Notes"):      notes_parts.append(str(row["Notes"]).strip())
+    if row.get("Boba Machine Qty","").strip():
+        notes_parts.append("Boba machines: " + row["Boba Machine Qty"].strip())
+    if row.get("Ramen Machine Qty","").strip():
+        notes_parts.append("Ramen machines: " + row["Ramen Machine Qty"].strip())
+    if row.get("YKE Opportunity Size (36-Mo TCV)","").strip():
+        notes_parts.append("TCV: " + row["YKE Opportunity Size (36-Mo TCV)"].strip())
+    notes    = " | ".join(notes_parts)
+    next_step = str(row.get("Next Step", "")).strip()
+    doc_url   = str(row.get("Gemini Doc URL", "")).strip()
+
+    interaction_rows.append(
+        f"  ('{ORG_ID}', {sq(itype)}, {occurred}, '{acc_id}', {con_val}, "
+        f"{sq(subject)}, {sq(notes)}, {sq(next_step)}, {sq(doc_url)}, now(), now())"
+    )
+
+w(f"-- ── Interactions ({len(interaction_rows)} rows)")
+w("insert into interactions")
+w("  (organization_id, type, occurred_at, account_id, contact_id,")
+w("   subject, notes, next_steps, google_doc_url, created_at, updated_at)")
+w("values")
+w(",\n".join(interaction_rows) + "\nON CONFLICT DO NOTHING;")
+w()
+
+# ── Extra contacts from Master Database primary contact columns ───────────────
+extra_rows = []
 seen_emails: set[str] = set()
 for row in accounts_raw:
-    acc_name = str(row.get("Account Name", "")).strip()
-    acc_uuid = account_uuid.get(acc_name)
-    if not acc_uuid:
-        continue
+    raw_name = str(row.get("Account Name", "")).strip()
+    acc_key  = raw_name if raw_name else "-"
+    acc_id   = account_uuid[acc_key]
+
     fn = str(row.get("Primary Contact First Name", "")).strip()
     ln = str(row.get("Primary Contact Last Name", "")).strip()
     if not fn and not ln:
         continue
-    if not ln:
-        ln = "-"  # last_name is NOT NULL
-    if not fn:
-        fn = ln
-        ln = "-"
+    fn = fn or "-"
+    ln = ln or "-"
+
     email = str(row.get("Email", "")).strip().lower()
-    # skip if already in contacts sheet by email
     if email and email in seen_emails:
         continue
     if email:
         seen_emails.add(email)
+
     phone = (str(row.get("Mobile", "")).strip() or
              str(row.get("Company Phone", "")).strip())
-    new_uid = stable_uuid(f"master-contact:{acc_name}:{fn}:{ln}:{email}")
-    extra_contact_rows.append(
-        f"  ('{new_uid}', '{ORG_ID}', '{acc_uuid}', {sq(fn)}, {sq(ln)}, "
+    new_uid = stable_uuid(f"master-contact:{acc_key}:{fn}:{ln}:{email}")
+    extra_rows.append(
+        f"  ('{new_uid}', '{ORG_ID}', '{acc_id}', {sq(fn)}, {sq(ln)}, "
         f"{sq(row.get('Title',''))}, {sq(email)}, {sq(phone)}, "
         f"{sq(row.get('Person Linkedin Url',''))}, false, now(), now())"
     )
 
-if extra_contact_rows:
-    w(",\n".join(extra_contact_rows) + "\nON CONFLICT (id) DO NOTHING;")
-else:
-    w("-- (no extra contacts to add)")
-w()
+if extra_rows:
+    w(f"-- ── Extra contacts from Master DB primary contact columns ({len(extra_rows)} rows)")
+    w("insert into contacts")
+    w("  (id, organization_id, account_id, first_name, last_name, title,")
+    w("   email, phone, linkedin_url, is_primary, created_at, updated_at)")
+    w("values")
+    w(",\n".join(extra_rows) + "\nON CONFLICT (id) DO NOTHING;")
+    w()
 
 # ── write file ────────────────────────────────────────────────────────────────
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
@@ -434,8 +361,8 @@ with open(OUT, "w", encoding="utf-8") as f:
     f.write("\n".join(lines))
 
 print(f"\n✓ Written to: {OUT}")
-print(f"  Accounts:     {len(account_rows)}")
-print(f"  Contacts:     {len(contact_rows)}")
-print(f"  Interactions: {len(interaction_rows)}")
-print(f"  Extra contacts from master DB: {len(extra_contact_rows)}")
-print("\nNext step: paste 006_import_csv_data.sql into Supabase SQL Editor and run it.")
+print(f"  Accounts:              {len(account_rows)} ({extra_account_count} extra from contacts/interactions)")
+print(f"  Contacts (sheet):      {len(contact_rows)}")
+print(f"  Contacts (master DB):  {len(extra_rows)}")
+print(f"  Interactions:          {len(interaction_rows)}")
+print("\nNext: paste 006_import_csv_data.sql into Supabase SQL Editor and run.")
