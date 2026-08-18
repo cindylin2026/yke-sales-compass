@@ -133,12 +133,16 @@ for row in interactions_raw:
     if key not in account_uuid:
         account_uuid[key] = stable_uuid(f"account:{key}")
 
-# Contact ID → UUID
-contact_uuid: dict[str, str] = {}
-for row in contacts_raw:
+# Contact ID → UUID — use (ID + index) to handle duplicate IDs in CSV
+contact_uuid: dict[str, str] = {}  # key = "cid:rowindex"
+contact_id_to_keys: dict[str, list[str]] = {}  # cid → list of keys
+
+for i, row in enumerate(contacts_raw):
     cid = str(row.get("Contact ID", "")).strip()
     if cid:
-        contact_uuid[cid] = stable_uuid(f"contact:{cid}")
+        key = f"{cid}:{i}"
+        contact_uuid[key] = stable_uuid(f"contact:{key}")
+        contact_id_to_keys.setdefault(cid, []).append(key)
 
 print(f"\nTotal unique accounts (incl. contacts-only): {len(account_uuid)}")
 print(f"Unique contacts: {len(contact_uuid)}")
@@ -238,11 +242,12 @@ w()
 
 # ── CONTACTS ──────────────────────────────────────────────────────────────────
 contact_rows = []
-for row in contacts_raw:
+for i, row in enumerate(contacts_raw):
     cid = str(row.get("Contact ID", "")).strip()
     if not cid:
         continue
-    uid = contact_uuid[cid]
+    key = f"{cid}:{i}"
+    uid = contact_uuid[key]
 
     raw_acc = str(row.get("Account Name", "")).strip()
     acc_key = raw_acc if raw_acc else "-"
@@ -283,7 +288,11 @@ for row in interactions_raw:
     acc_id  = account_uuid[acc_key]  # always exists now
 
     cid      = str(row.get("Contact ID", "")).strip()
-    con_val  = f"'{contact_uuid[cid]}'" if cid and cid in contact_uuid else "null"
+    # Use first occurrence of this contact ID
+    if cid and cid in contact_id_to_keys:
+        con_val = f"'{contact_uuid[contact_id_to_keys[cid][0]]}'"
+    else:
+        con_val = "null"
 
     itype    = clean_interaction_type(row.get("Interaction Type", ""))
     date_val = sqdate(row.get("Date", ""))
@@ -317,8 +326,14 @@ w(",\n".join(interaction_rows) + "\nON CONFLICT DO NOTHING;")
 w()
 
 # ── Extra contacts from Master Database primary contact columns ───────────────
+# Only add contacts whose email is NOT already in the Contacts sheet
 extra_rows = []
-seen_emails: set[str] = set()
+contact_sheet_emails = {
+    str(r.get("Email","")).strip().lower()
+    for r in contacts_raw
+    if str(r.get("Email","")).strip()
+}
+
 for row in accounts_raw:
     raw_name = str(row.get("Account Name", "")).strip()
     acc_key  = raw_name if raw_name else "-"
@@ -332,10 +347,9 @@ for row in accounts_raw:
     ln = ln or "-"
 
     email = str(row.get("Email", "")).strip().lower()
-    if email and email in seen_emails:
+    # Skip only if this exact email is already in the Contacts sheet
+    if email and email in contact_sheet_emails:
         continue
-    if email:
-        seen_emails.add(email)
 
     phone = (str(row.get("Mobile", "")).strip() or
              str(row.get("Company Phone", "")).strip())
