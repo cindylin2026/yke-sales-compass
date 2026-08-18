@@ -300,6 +300,8 @@ for row in contacts_raw:
     ln = str(row.get("Last Name", "")).strip()
     if not fn and not ln:
         continue
+    if not ln:
+        ln = "-"  # last_name is NOT NULL in schema
 
     phone = (str(row.get("Mobile", "")).strip() or
              str(row.get("Company Phone", "")).strip())
@@ -393,6 +395,11 @@ for row in accounts_raw:
     ln = str(row.get("Primary Contact Last Name", "")).strip()
     if not fn and not ln:
         continue
+    if not ln:
+        ln = "-"  # last_name is NOT NULL
+    if not fn:
+        fn = ln
+        ln = "-"
     email = str(row.get("Email", "")).strip().lower()
     # skip if already in contacts sheet by email
     if email and email in seen_emails:
