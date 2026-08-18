@@ -188,9 +188,22 @@ async function fetchAll<T>(
   query: ReturnType<typeof supabase.from>,
   mapper: (r: never) => T,
 ): Promise<T[]> {
-  const { data, error } = await (query as ReturnType<typeof supabase.from>).select("*");
-  if (error) throw new Error(error.message);
-  return (data ?? []).map(mapper as (r: unknown) => T);
+  const PAGE = 1000;
+  const results: T[] = [];
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await (query as ReturnType<typeof supabase.from>)
+      .select("*")
+      .range(from, from + PAGE - 1);
+    if (error) throw new Error(error.message);
+    const page = (data ?? []).map(mapper as (r: unknown) => T);
+    results.push(...page);
+    if (page.length < PAGE) break;   // last page
+    from += PAGE;
+  }
+
+  return results;
 }
 
 // ── Public API ────────────────────────────────────────────────
@@ -209,13 +222,22 @@ export async function fetchSnapshot(): Promise<CrmDatabase> {
     ]);
 
   // Attach stage history to leads
-  const { data: history } = await supabase
-    .from("lead_stage_history")
-    .select("*")
-    .order("changed_at", { ascending: true });
+  const allHistory: { lead_id: string; new_stage: string; changed_at: string; changed_by: string | null; note: string | null }[] = [];
+  let hFrom = 0;
+  while (true) {
+    const { data: page } = await supabase
+      .from("lead_stage_history")
+      .select("*")
+      .order("changed_at", { ascending: true })
+      .range(hFrom, hFrom + 999);
+    if (!page || page.length === 0) break;
+    allHistory.push(...page);
+    if (page.length < 1000) break;
+    hFrom += 1000;
+  }
 
   const historyByLead = new Map<string, Lead["lifecycle_history"]>();
-  for (const h of history ?? []) {
+  for (const h of allHistory) {
     const arr = historyByLead.get(h.lead_id) ?? [];
     arr.push({
       stage: h.new_stage as LeadLifecycleStage,
@@ -291,19 +313,20 @@ export async function dbConvertLead(input: ConvertLeadInput): Promise<ConvertLea
   const { data, error } = await supabase.rpc("convert_lead", {
     p_lead_id: input.lead_id,
     p_account_id: input.account_id,
-    p_new_account: input.new_account
-      ? JSON.stringify(input.new_account)
-      : null,
+    p_new_account: input.new_account ? JSON.stringify(input.new_account) : null,
     p_contact_id: input.contact_id,
     p_create_contact: input.create_contact,
     p_create_opportunity: input.create_opportunity,
-    p_opportunity: input.opportunity
-      ? JSON.stringify(input.opportunity)
-      : null,
+    p_opportunity: input.opportunity ? JSON.stringify(input.opportunity) : null,
     p_owner_id: input.owner_user_id,
   });
   if (error) throw new Error(error.message);
-  const result = data as { lead_id: string; account_id: string; contact_id: string; opportunity_id: string | null };
+  const result = data as {
+    lead_id: string;
+    account_id: string;
+    contact_id: string;
+    opportunity_id: string | null;
+  };
   return {
     lead_id: result.lead_id,
     account_id: result.account_id,
@@ -341,8 +364,7 @@ export async function dbUpdateOpportunityStage(
   oppId: ID,
   stage: Opportunity["stage"],
 ): Promise<void> {
-  const closedAt =
-    stage === "Won" || stage === "Lost" ? new Date().toISOString() : null;
+  const closedAt = stage === "Won" || stage === "Lost" ? new Date().toISOString() : null;
   const probability = stage === "Won" ? 100 : stage === "Lost" ? 0 : undefined;
   const { error } = await supabase
     .from("opportunities")
@@ -392,9 +414,7 @@ export async function dbRequestAiSummary(interactionId: ID): Promise<void> {
   // TODO: trigger AI summarizer edge function here
 }
 
-export async function dbCreateTask(
-  task: Omit<Task, "id" | "created_at">,
-): Promise<Task> {
+export async function dbCreateTask(task: Omit<Task, "id" | "created_at">): Promise<Task> {
   const { data, error } = await supabase
     .from("tasks")
     .insert({
@@ -435,14 +455,8 @@ export async function dbReopenTask(taskId: ID): Promise<void> {
 
 // ── Duplicate detection ───────────────────────────────────────
 
-export async function findDuplicateAccounts(
-  name: string,
-  domain?: string,
-): Promise<Account[]> {
-  let query = supabase
-    .from("accounts")
-    .select("*")
-    .ilike("name", `%${name}%`);
+export async function findDuplicateAccounts(name: string, domain?: string): Promise<Account[]> {
+  let query = supabase.from("accounts").select("*").ilike("name", `%${name}%`);
 
   if (domain) {
     query = supabase
@@ -456,27 +470,68 @@ export async function findDuplicateAccounts(
 }
 
 export async function findDuplicateContacts(email: string): Promise<Contact[]> {
-  const { data } = await supabase
-    .from("contacts")
-    .select("*")
-    .ilike("email", email)
-    .limit(5);
+  const { data } = await supabase.from("contacts").select("*").ilike("email", email).limit(5);
   return (data ?? []).map(mapContact as (r: unknown) => Contact);
 }
 
 export async function findDuplicateLeads(email: string): Promise<Lead[]> {
-  const { data } = await supabase
-    .from("leads")
-    .select("*")
-    .ilike("email", email)
-    .limit(5);
+  const { data } = await supabase.from("leads").select("*").ilike("email", email).limit(5);
   return (data ?? []).map(mapLead as (r: unknown) => Lead);
+}
+
+// ── Generic row editor (spreadsheet-style data grid) ────────────
+// Operates on raw DB columns rather than the mapped app types above —
+// used only by the admin "Data Editor" page, which is meant to expose
+// the real table shape directly (like editing the sheet used to be).
+
+export type EditableTable =
+  "accounts" | "contacts" | "leads" | "opportunities" | "tasks" | "campaigns";
+
+export async function dbListRows(table: EditableTable): Promise<Record<string, unknown>[]> {
+  const { data, error } = await supabase
+    .from(table)
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as Record<string, unknown>[];
+}
+
+export async function dbUpdateRow(
+  table: EditableTable,
+  id: ID,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  // Dynamic table names defeat supabase-js's per-table generated types.
+  const { error } = await (supabase.from(table) as ReturnType<typeof supabase.from>)
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+export async function dbInsertRow(
+  table: EditableTable,
+  row: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const orgId = await getOrgId();
+  const { data, error } = await (supabase.from(table) as ReturnType<typeof supabase.from>)
+    .insert({ ...row, organization_id: orgId })
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return data as Record<string, unknown>;
+}
+
+export async function dbDeleteRow(table: EditableTable, id: ID): Promise<void> {
+  const { error } = await supabase.from(table).delete().eq("id", id);
+  if (error) throw new Error(error.message);
 }
 
 // ── Helpers ───────────────────────────────────────────────────
 
 async function getOrgId(): Promise<string> {
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
   const { data } = await supabase
     .from("profiles")
