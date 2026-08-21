@@ -192,10 +192,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         <header className="sticky top-0 z-20 flex h-15 items-center gap-3 border-b border-border bg-surface/85 px-4 py-3 backdrop-blur md:px-6">
           <button
             onClick={() => setSearchOpen(true)}
-            className="flex h-9 flex-1 items-center gap-2 rounded-lg border border-border bg-surface-muted px-3 text-sm text-muted-foreground transition-colors hover:border-ring/40 md:max-w-md"
+            className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg border border-border bg-surface-muted px-3 text-sm text-muted-foreground transition-colors hover:border-ring/40 md:max-w-md"
           >
-            <Search className="size-4" />
-            <span className="flex-1 text-left">
+            <Search className="size-4 shrink-0" />
+            <span className="min-w-0 flex-1 truncate text-left">
               Search accounts, contacts, leads, opportunities…
             </span>
             <kbd className="hidden items-center gap-0.5 rounded border border-border bg-surface px-1.5 py-0.5 text-[10px] md:inline-flex">
