@@ -202,7 +202,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <CommandIcon className="size-3" />K
             </kbd>
           </button>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto hidden items-center gap-2 md:flex">
             <Button asChild size="sm" variant="outline">
               <Link to="/tasks">Today&apos;s follow-ups {dueCount > 0 ? `(${dueCount})` : ""}</Link>
             </Button>
@@ -219,6 +219,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Link to="/leads/new">New Lead</Link>
             </Button>
           </div>
+          <Button asChild size="sm" className="ml-auto shrink-0 md:hidden">
+            <Link to="/leads/new">New Lead</Link>
+          </Button>
         </header>
 
         <nav className="flex gap-1 overflow-x-auto border-b border-border bg-surface px-4 py-2 lg:hidden">
