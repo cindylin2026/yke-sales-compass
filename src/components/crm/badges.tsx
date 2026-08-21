@@ -19,12 +19,19 @@ const stageStyles: Record<LeadLifecycleStage, string> = {
   Disqualified: "border-destructive/25 bg-destructive/10 text-destructive",
 };
 
-export function LifecycleBadge({ stage, className }: { stage: LeadLifecycleStage; className?: string }) {
+export function LifecycleBadge({
+  stage,
+  className,
+}: {
+  stage: LeadLifecycleStage;
+  className?: string;
+}) {
   return <span className={cn(base, stageStyles[stage], className)}>{stage}</span>;
 }
 
 const oppStyles: Record<OpportunityStage, string> = {
   Discovery: "border-info/30 bg-info/10 text-info",
+  Demo: "border-violet-400/30 bg-violet-400/10 text-violet-600",
   Proposal: "border-ember/30 bg-ember/10 text-ember",
   Negotiation: "border-warning/40 bg-warning/15 text-warning-foreground",
   Won: "border-success/30 bg-success/12 text-success",
@@ -48,7 +55,9 @@ export function AccountStatusBadge({ status }: { status: AccountStatus }) {
 }
 
 export function TypeBadge({ type }: { type: InteractionType | TaskType | string }) {
-  return <span className={cn(base, "border-border bg-surface-muted text-muted-foreground")}>{type}</span>;
+  return (
+    <span className={cn(base, "border-border bg-surface-muted text-muted-foreground")}>{type}</span>
+  );
 }
 
 export function SourceBadge({ source }: { source: string }) {
@@ -63,7 +72,11 @@ export function SourceBadge({ source }: { source: string }) {
  */
 export function LeadScore({ value, className }: { value: number; className?: string }) {
   const tone =
-    value >= 75 ? "bg-success/12 text-success border-success/30" : value >= 50 ? "bg-warning/15 text-warning-foreground border-warning/40" : "bg-surface-muted text-muted-foreground border-border";
+    value >= 75
+      ? "bg-success/12 text-success border-success/30"
+      : value >= 50
+        ? "bg-warning/15 text-warning-foreground border-warning/40"
+        : "bg-surface-muted text-muted-foreground border-border";
   return (
     <span
       className={cn(
@@ -97,7 +110,13 @@ export function FitScore({
   const r = (dims - stroke) / 2;
   const c = 2 * Math.PI * r;
   const color =
-    value >= 85 ? "var(--success)" : value >= 70 ? "var(--ember)" : value >= 55 ? "var(--warning)" : "var(--muted-foreground)";
+    value >= 85
+      ? "var(--success)"
+      : value >= 70
+        ? "var(--ember)"
+        : value >= 55
+          ? "var(--warning)"
+          : "var(--muted-foreground)";
   return (
     <div
       className={cn("relative inline-flex shrink-0 items-center justify-center", className)}
@@ -105,7 +124,14 @@ export function FitScore({
       title="Account Fit Score — how well this company matches YKE's ideal customer profile"
     >
       <svg width={dims} height={dims} className="-rotate-90">
-        <circle cx={dims / 2} cy={dims / 2} r={r} fill="none" stroke="var(--border)" strokeWidth={stroke} />
+        <circle
+          cx={dims / 2}
+          cy={dims / 2}
+          r={r}
+          fill="none"
+          stroke="var(--border)"
+          strokeWidth={stroke}
+        />
         <circle
           cx={dims / 2}
           cy={dims / 2}
@@ -131,6 +157,12 @@ export function FitScore({
 
 export function PriorityDot({ priority }: { priority: "Low" | "Normal" | "High" }) {
   const tone =
-    priority === "High" ? "bg-destructive" : priority === "Normal" ? "bg-info" : "bg-muted-foreground/50";
-  return <span className={cn("inline-block size-2 rounded-full", tone)} title={`${priority} priority`} />;
+    priority === "High"
+      ? "bg-destructive"
+      : priority === "Normal"
+        ? "bg-info"
+        : "bg-muted-foreground/50";
+  return (
+    <span className={cn("inline-block size-2 rounded-full", tone)} title={`${priority} priority`} />
+  );
 }

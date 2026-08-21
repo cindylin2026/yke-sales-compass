@@ -2,10 +2,13 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, ArrowRight, Mail, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader, Panel, DetailRow, EmptyState, StatCard } from "@/components/crm/ui-bits";
-import { AccountStatusBadge, FitScore, StageBadge, TypeBadge } from "@/components/crm/badges";
+import { StageBadge } from "@/components/crm/badges";
 import { InteractionTimeline } from "@/components/crm/InteractionTimeline";
 import { TaskList } from "@/components/crm/TaskList";
 import { LogInteractionDialog } from "@/components/crm/LogInteractionDialog";
+import { CreateOpportunityDialog } from "@/components/crm/CreateOpportunityDialog";
+import { CreateContactDialog } from "@/components/crm/CreateContactDialog";
+import { EditableAccountDetails } from "@/components/crm/EditableAccountDetails";
 import { useCrm } from "@/lib/crm/provider";
 import {
   formatCurrency,
@@ -48,9 +51,7 @@ function AccountDetailPage() {
   const interactions = relatedInteractions(db.interactions, { accountId });
   const tasks = relatedTasks(db.tasks, { accountId });
   const openTasks = tasks.filter((t) => t.status === "Open");
-  const originatingLeads = db.leads.filter(
-    (l) => l.converted_account_id === accountId,
-  );
+  const originatingLeads = db.leads.filter((l) => l.converted_account_id === accountId);
 
   return (
     <>
@@ -65,7 +66,7 @@ function AccountDetailPage() {
       <PageHeader
         eyebrow={`${account.segment} · ${account.region} · ${account.country}`}
         title={account.name}
-        description={account.domain ?? undefined}
+        {...(account.domain ? { description: account.domain } : {})}
         actions={
           <LogInteractionDialog
             trigger={<Button size="sm">Log interaction</Button>}
@@ -76,7 +77,12 @@ function AccountDetailPage() {
 
       {/* KPI strip */}
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Open pipeline" value={formatCurrency(sumAmount(open))} hint={`${formatCurrency(weightedAmount(open))} weighted`} tone="success" />
+        <StatCard
+          label="Open pipeline"
+          value={formatCurrency(sumAmount(open))}
+          hint={`${formatCurrency(weightedAmount(open))} weighted`}
+          tone="success"
+        />
         <StatCard label="Open opps" value={open.length} />
         <StatCard label="Contacts" value={contacts.length} />
         <StatCard label="Interactions" value={interactions.length} />
@@ -85,30 +91,7 @@ function AccountDetailPage() {
       <div className="grid gap-5 lg:grid-cols-3">
         {/* Left column */}
         <div className="space-y-5">
-          <Panel title="Account details">
-            <div className="flex flex-col items-center gap-3 pb-4">
-              <FitScore value={account.account_fit_score} size="lg" />
-              <div className="text-center">
-                <p className="text-xs text-muted-foreground">Account Fit Score</p>
-                <p className="text-xs text-muted-foreground">ICP alignment</p>
-              </div>
-              <AccountStatusBadge status={account.status} />
-            </div>
-            <div className="divide-y divide-border">
-              <DetailRow label="Segment" value={account.segment} />
-              <DetailRow label="Region" value={account.region} />
-              <DetailRow label="Country" value={account.country} />
-              {account.city && <DetailRow label="City" value={account.city} />}
-              {account.employee_count && (
-                <DetailRow label="Employees" value={account.employee_count.toLocaleString()} />
-              )}
-              {account.locations_count && (
-                <DetailRow label="Locations" value={account.locations_count} />
-              )}
-              <DetailRow label="Owner" value={userName(db, account.owner_user_id)} />
-              <DetailRow label="Created" value={formatDate(account.created_at)} />
-            </div>
-          </Panel>
+          <EditableAccountDetails account={account} />
 
           {account.notes && (
             <Panel title="Notes">
@@ -119,7 +102,19 @@ function AccountDetailPage() {
           {/* Contacts */}
           <Panel
             title="Contacts"
-            actions={<span className="text-xs text-muted-foreground">{contacts.length}</span>}
+            actions={
+              <div className="flex items-center gap-2">
+                <CreateContactDialog
+                  account={account}
+                  trigger={
+                    <Button size="sm" variant="outline">
+                      New contact
+                    </Button>
+                  }
+                />
+                <span className="text-xs text-muted-foreground">{contacts.length}</span>
+              </div>
+            }
             bodyClassName="p-0"
           >
             {contacts.length ? (
@@ -127,7 +122,11 @@ function AccountDetailPage() {
                 {contacts.map((c) => (
                   <li key={c.id} className="px-4 py-3">
                     <div className="flex items-start justify-between gap-2">
-                      <div>
+                      <Link
+                        to="/contacts/$contactId"
+                        params={{ contactId: c.id }}
+                        className="hover:text-ember hover:underline"
+                      >
                         <p className="text-sm font-medium">
                           {c.first_name} {c.last_name}
                           {c.is_primary && (
@@ -137,14 +136,15 @@ function AccountDetailPage() {
                           )}
                         </p>
                         {c.title && <p className="text-xs text-muted-foreground">{c.title}</p>}
-                      </div>
+                      </Link>
                     </div>
                     <div className="mt-1.5 flex flex-wrap gap-2">
                       <a
                         href={`mailto:${c.email}`}
-                        className="inline-flex items-center gap-1 text-xs text-info hover:underline"
+                        className="inline-flex min-w-0 max-w-full items-center gap-1 text-xs text-info hover:underline"
                       >
-                        <Mail className="size-3" /> {c.email}
+                        <Mail className="size-3 shrink-0" />
+                        <span className="truncate">{c.email}</span>
                       </a>
                       {c.phone && (
                         <a
@@ -195,11 +195,22 @@ function AccountDetailPage() {
           <Panel
             title="Opportunities"
             actions={
-              <Button asChild size="sm" variant="ghost">
-                <Link to="/opportunities">
-                  Pipeline <ArrowRight className="size-3.5" />
-                </Link>
-              </Button>
+              <div className="flex items-center gap-2">
+                <CreateOpportunityDialog
+                  account={account}
+                  contacts={contacts}
+                  trigger={
+                    <Button size="sm" variant="outline">
+                      New opportunity
+                    </Button>
+                  }
+                />
+                <Button asChild size="sm" variant="ghost">
+                  <Link to="/opportunities">
+                    Pipeline <ArrowRight className="size-3.5" />
+                  </Link>
+                </Button>
+              </div>
             }
             bodyClassName="p-0"
           >

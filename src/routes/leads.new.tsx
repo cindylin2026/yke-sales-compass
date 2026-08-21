@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
-import { ArrowLeft } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ArrowLeft, ArrowRight, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,8 +13,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PageHeader, Panel, Field } from "@/components/crm/ui-bits";
+import { LeadScore } from "@/components/crm/badges";
 import { useCrm } from "@/lib/crm/provider";
-import { LEAD_SOURCES, LEAD_STAGES, type LeadLifecycleStage, type LeadSource, type Region } from "@/lib/crm/types";
+import { computeLeadScore, findLeadDuplicates } from "@/lib/crm/selectors";
+import {
+  ACCOUNT_SEGMENTS,
+  LEAD_SOURCES,
+  LEAD_STAGES,
+  REGIONS,
+  type AccountSegment,
+  type LeadLifecycleStage,
+  type LeadSource,
+  type Region,
+} from "@/lib/crm/types";
 
 export const Route = createFileRoute("/leads/new")({
   head: () => ({
@@ -34,12 +45,12 @@ function NewLeadPage() {
   const [title, setTitle] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [companyDomain, setCompanyDomain] = useState("");
-  const [region, setRegion] = useState<Region>("US");
+  const [region, setRegion] = useState<Region>("North America");
+  const [segment, setSegment] = useState<AccountSegment>("Unknown");
   const [source, setSource] = useState<LeadSource>("Manual Entry");
   const [sourceDetail, setSourceDetail] = useState("");
   const [campaignId, setCampaignId] = useState<string>("none");
   const [stage, setStage] = useState<LeadLifecycleStage>("New");
-  const [leadScore, setLeadScore] = useState(50);
   const [ownerId, setOwnerId] = useState<string>(currentUser.id);
   const [notes, setNotes] = useState("");
 
@@ -47,14 +58,29 @@ function NewLeadPage() {
 
   const activeCampaigns = db.campaigns.filter((c) => c.is_active);
 
-  const submit = (e: React.FormEvent) => {
+  const leadScore = useMemo(
+    () => computeLeadScore({ source, phone, title, company_domain: companyDomain }),
+    [source, phone, title, companyDomain],
+  );
+
+  const duplicates = useMemo(
+    () =>
+      findLeadDuplicates(db, {
+        email,
+        companyDomain,
+        companyName,
+      }),
+    [db, email, companyDomain, companyName],
+  );
+
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!firstName.trim() || !lastName.trim() || !email.trim() || !companyName.trim()) {
       toast.error("First name, last name, email and company are required.");
       return;
     }
     setSaving(true);
-    const lead = createLead({
+    const lead = await createLead({
       first_name: firstName.trim(),
       last_name: lastName.trim(),
       email: email.trim(),
@@ -63,6 +89,7 @@ function NewLeadPage() {
       company_name: companyName.trim(),
       company_domain: companyDomain.trim() || undefined,
       region,
+      segment,
       source,
       source_detail: sourceDetail.trim() || undefined,
       campaign_id: campaignId === "none" ? null : campaignId,
@@ -97,6 +124,41 @@ function NewLeadPage() {
       />
 
       <form onSubmit={submit} className="mx-auto max-w-3xl space-y-5">
+        {duplicates.length > 0 && (
+          <div className="rounded-lg border border-warning/40 bg-warning/[0.07] p-4 ring-1 ring-warning/35">
+            <div className="flex items-start gap-2.5">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning-foreground" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-warning-foreground">
+                  This looks like it might already exist
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Found {duplicates.length} possible match{duplicates.length > 1 ? "es" : ""} by
+                  email or company. You can still create this lead if it&apos;s genuinely new.
+                </p>
+                <ul className="mt-2.5 space-y-1.5">
+                  {duplicates.map((d) => (
+                    <li key={`${d.kind}-${d.id}`}>
+                      <Link
+                        to={d.kind === "lead" ? "/leads/$leadId" : "/accounts/$accountId"}
+                        params={d.kind === "lead" ? { leadId: d.id } : { accountId: d.id }}
+                        target="_blank"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs hover:border-ring/40"
+                      >
+                        <span className="font-medium">{d.label}</span>
+                        <span className="text-muted-foreground">
+                          {d.reason} · {d.detail}
+                        </span>
+                        <ArrowRight className="size-3 text-muted-foreground" />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
+
         <Panel title="Contact information">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="First name *">
@@ -165,8 +227,25 @@ function NewLeadPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="US">US</SelectItem>
-                  <SelectItem value="Asia">Asia</SelectItem>
+                  {REGIONS.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {r}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Segment" hint="Leave as Unknown if you're not sure yet">
+              <Select value={segment} onValueChange={(v) => setSegment(v as AccountSegment)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ACCOUNT_SEGMENTS.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </Field>
@@ -225,14 +304,10 @@ function NewLeadPage() {
                 </SelectContent>
               </Select>
             </Field>
-            <Field label={`Lead score — ${leadScore}`} hint="0 (cold) → 100 (highly qualified)">
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                value={leadScore}
-                onChange={(e) => setLeadScore(Number(e.target.value))}
-              />
+            <Field label="Lead score" hint="Computed from source, phone, title and domain">
+              <div className="flex h-9 items-center">
+                <LeadScore value={leadScore} />
+              </div>
             </Field>
             <Field label="Owner">
               <Select value={ownerId} onValueChange={setOwnerId}>
@@ -253,7 +328,10 @@ function NewLeadPage() {
         </Panel>
 
         <Panel title="Notes">
-          <Field label="Internal notes" hint="What do you know about this prospect that isn't captured above?">
+          <Field
+            label="Internal notes"
+            hint="What do you know about this prospect that isn't captured above?"
+          >
             <Textarea
               rows={4}
               value={notes}

@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { ArrowRight, Building2, Check, Search, UserPlus } from "lucide-react";
+import { ArrowRight, Building2, Check, Search, TriangleAlert, UserPlus } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -24,21 +24,11 @@ import {
 import { Field } from "@/components/crm/ui-bits";
 import { FitScore } from "@/components/crm/badges";
 import { useCrm } from "@/lib/crm/provider";
-import { formatCurrency, leadName } from "@/lib/crm/selectors";
+import { computeOpportunityAmount, formatCurrency, leadName } from "@/lib/crm/selectors";
 import { dayOffset } from "@/lib/crm/seed";
+import { ACCOUNT_SEGMENTS, REGION_DEFAULT_COUNTRY } from "@/lib/crm/types";
 import type { AccountSegment, ID, Lead, OpportunityStage } from "@/lib/crm/types";
 import { cn } from "@/lib/utils";
-
-const SEGMENTS: AccountSegment[] = [
-  "Hotel",
-  "Airport",
-  "University",
-  "Hospital",
-  "Office / Corporate",
-  "Convenience Retail",
-  "Distributor",
-  "Entertainment",
-];
 
 /** Salesforce-style conversion: match-or-create Account, then Contact, then optional Opportunity. */
 export function ConvertLeadDialog({ lead, trigger }: { lead: Lead; trigger: ReactNode }) {
@@ -48,7 +38,7 @@ export function ConvertLeadDialog({ lead, trigger }: { lead: Lead; trigger: Reac
 
   const [accountQuery, setAccountQuery] = useState(lead.company_name);
   const [selectedAccountId, setSelectedAccountId] = useState<ID | "new">("new");
-  const [segment, setSegment] = useState<AccountSegment>("Hotel");
+  const [segment, setSegment] = useState<AccountSegment>(lead.segment ?? "Unknown");
   const [fitScore, setFitScore] = useState(70);
 
   const [selectedContactId, setSelectedContactId] = useState<ID | "new">("new");
@@ -56,10 +46,14 @@ export function ConvertLeadDialog({ lead, trigger }: { lead: Lead; trigger: Reac
   const [createOpp, setCreateOpp] = useState(true);
   const [oppName, setOppName] = useState(`${lead.company_name} — initial kiosk program`);
   const [oppStage, setOppStage] = useState<OpportunityStage>("Discovery");
-  const [amount, setAmount] = useState(40000);
+  const [bobaQty, setBobaQty] = useState(0);
+  const [ramenQty, setRamenQty] = useState(1);
   const [probability, setProbability] = useState(20);
   const [closeDate, setCloseDate] = useState(dayOffset(45));
   const [nextAction, setNextAction] = useState("Schedule discovery call");
+  const [nextActionDueDate, setNextActionDueDate] = useState(dayOffset(3));
+
+  const [submitting, setSubmitting] = useState(false);
 
   // Match on company name AND domain, the way a rep would.
   const accountMatches = useMemo(() => {
@@ -80,50 +74,72 @@ export function ConvertLeadDialog({ lead, trigger }: { lead: Lead; trigger: Reac
       return db.contacts.filter((c) => c.email.toLowerCase() === lead.email.toLowerCase());
     }
     return db.contacts.filter(
-      (c) => c.account_id === selectedAccountId || c.email.toLowerCase() === lead.email.toLowerCase(),
+      (c) =>
+        c.account_id === selectedAccountId || c.email.toLowerCase() === lead.email.toLowerCase(),
     );
   }, [db.contacts, selectedAccountId, lead.email]);
 
-  const submit = () => {
-    const result = convertLead({
-      lead_id: lead.id,
-      account_id: selectedAccountId === "new" ? null : selectedAccountId,
-      ...(selectedAccountId === "new"
-        ? {
-            new_account: {
-              name: accountQuery.trim() || lead.company_name,
-              domain: lead.company_domain ?? "",
-              segment,
-              region: lead.region,
-              country: lead.region === "Asia" ? "Singapore" : "United States",
-              status: "Active Prospect" as const,
-              account_fit_score: fitScore,
-            },
-          }
-        : {}),
-      contact_id: selectedContactId === "new" ? null : selectedContactId,
-      create_contact: selectedContactId === "new",
-      create_opportunity: createOpp,
-      ...(createOpp
-        ? {
-            opportunity: {
-              name: oppName,
-              stage: oppStage,
-              amount,
-              probability,
-              expected_close_date: closeDate,
-              next_action: nextAction,
-            },
-          }
-        : {}),
-      owner_user_id: lead.owner_user_id,
-    });
+  const exactAccountDuplicate = useMemo(() => {
+    if (selectedAccountId !== "new") return undefined;
+    const q = accountQuery.trim().toLowerCase();
+    if (!q) return undefined;
+    return db.accounts.find((a) => a.name.trim().toLowerCase() === q);
+  }, [selectedAccountId, accountQuery, db.accounts]);
 
-    toast.success("Lead converted", {
-      description: `Lead ${lead.id} preserved with its source, campaign and lifecycle history.`,
-    });
-    setOpen(false);
-    void navigate({ to: "/accounts/$accountId", params: { accountId: result.account_id } });
+  const oppAmount = computeOpportunityAmount({
+    boba_machine_qty: bobaQty,
+    ramen_machine_qty: ramenQty,
+  });
+
+  const submit = async () => {
+    setSubmitting(true);
+    try {
+      const result = await convertLead({
+        lead_id: lead.id,
+        account_id: selectedAccountId === "new" ? null : selectedAccountId,
+        ...(selectedAccountId === "new"
+          ? {
+              new_account: {
+                name: accountQuery.trim() || lead.company_name,
+                domain: lead.company_domain,
+                segment,
+                region: lead.region,
+                country: REGION_DEFAULT_COUNTRY[lead.region] ?? "",
+                status: "Active Prospect" as const,
+                account_fit_score: fitScore,
+              },
+            }
+          : {}),
+        contact_id: selectedContactId === "new" ? null : selectedContactId,
+        create_contact: selectedContactId === "new",
+        create_opportunity: createOpp,
+        ...(createOpp
+          ? {
+              opportunity: {
+                name: oppName,
+                stage: oppStage,
+                boba_machine_qty: bobaQty,
+                ramen_machine_qty: ramenQty,
+                probability,
+                expected_close_date: closeDate,
+                next_action: nextAction,
+                next_action_due_date: nextActionDueDate,
+              },
+            }
+          : {}),
+        owner_user_id: lead.owner_user_id,
+      });
+
+      toast.success("Lead converted", {
+        description: `Lead ${lead.id} preserved with its source, campaign and lifecycle history.`,
+      });
+      setOpen(false);
+      void navigate({ to: "/accounts/$accountId", params: { accountId: result.account_id } });
+    } catch (e) {
+      toast.error("Failed to convert lead", { description: (e as Error).message });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -193,6 +209,15 @@ export function ConvertLeadDialog({ lead, trigger }: { lead: Lead; trigger: Reac
                 Create new account &ldquo;{accountQuery || lead.company_name}&rdquo;
               </button>
             </div>
+            {exactAccountDuplicate ? (
+              <div className="mt-2 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/[0.07] px-3 py-2 text-xs text-warning-foreground">
+                <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
+                <span>
+                  &ldquo;{exactAccountDuplicate.name}&rdquo; already exists — pick it above instead
+                  of creating a duplicate, unless this is genuinely a different company.
+                </span>
+              </div>
+            ) : null}
             {selectedAccountId === "new" ? (
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <Field label="Segment">
@@ -201,7 +226,7 @@ export function ConvertLeadDialog({ lead, trigger }: { lead: Lead; trigger: Reac
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {SEGMENTS.map((s) => (
+                      {ACCOUNT_SEGMENTS.map((s) => (
                         <SelectItem key={s} value={s}>
                           {s}
                         </SelectItem>
@@ -209,7 +234,10 @@ export function ConvertLeadDialog({ lead, trigger }: { lead: Lead; trigger: Reac
                     </SelectContent>
                   </Select>
                 </Field>
-                <Field label="Account Fit Score" hint="ICP fit of the company — separate from lead score">
+                <Field
+                  label="Account Fit Score"
+                  hint="ICP fit of the company — separate from lead score"
+                >
                   <Input
                     type="number"
                     min={0}
@@ -288,7 +316,10 @@ export function ConvertLeadDialog({ lead, trigger }: { lead: Lead; trigger: Reac
                   </Field>
                 </div>
                 <Field label="Stage">
-                  <Select value={oppStage} onValueChange={(v) => setOppStage(v as OpportunityStage)}>
+                  <Select
+                    value={oppStage}
+                    onValueChange={(v) => setOppStage(v as OpportunityStage)}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -301,14 +332,32 @@ export function ConvertLeadDialog({ lead, trigger }: { lead: Lead; trigger: Reac
                     </SelectContent>
                   </Select>
                 </Field>
-                <Field label={`Amount — ${formatCurrency(amount)}`}>
+                <Field label="Boba machines">
                   <Input
                     type="number"
-                    step={1000}
-                    value={amount}
-                    onChange={(e) => setAmount(Number(e.target.value))}
+                    min={0}
+                    value={bobaQty}
+                    onChange={(e) => setBobaQty(Math.max(0, Number(e.target.value)))}
                   />
                 </Field>
+                <Field label="Ramen machines">
+                  <Input
+                    type="number"
+                    min={0}
+                    value={ramenQty}
+                    onChange={(e) => setRamenQty(Math.max(0, Number(e.target.value)))}
+                  />
+                </Field>
+                <div className="sm:col-span-2">
+                  <Field
+                    label={`Amount (36-mo TCV) — ${formatCurrency(oppAmount)}`}
+                    hint="Computed automatically from machine count"
+                  >
+                    <div className="rounded-lg border border-dashed border-border bg-surface-muted px-3 py-2 text-sm text-muted-foreground">
+                      {formatCurrency(oppAmount)}
+                    </div>
+                  </Field>
+                </div>
                 <Field label="Probability %">
                   <Input
                     type="number"
@@ -319,13 +368,22 @@ export function ConvertLeadDialog({ lead, trigger }: { lead: Lead; trigger: Reac
                   />
                 </Field>
                 <Field label="Expected close date">
-                  <Input type="date" value={closeDate} onChange={(e) => setCloseDate(e.target.value)} />
+                  <Input
+                    type="date"
+                    value={closeDate}
+                    onChange={(e) => setCloseDate(e.target.value)}
+                  />
                 </Field>
-                <div className="sm:col-span-2">
-                  <Field label="Next action">
-                    <Input value={nextAction} onChange={(e) => setNextAction(e.target.value)} />
-                  </Field>
-                </div>
+                <Field label="Next action" hint="Creates an open follow-up task">
+                  <Input value={nextAction} onChange={(e) => setNextAction(e.target.value)} />
+                </Field>
+                <Field label="Next action due">
+                  <Input
+                    type="date"
+                    value={nextActionDueDate}
+                    onChange={(e) => setNextActionDueDate(e.target.value)}
+                  />
+                </Field>
               </div>
             ) : (
               <p className="text-xs text-muted-foreground">
@@ -339,11 +397,12 @@ export function ConvertLeadDialog({ lead, trigger }: { lead: Lead; trigger: Reac
           <p className="mr-auto text-xs text-muted-foreground">
             Lead {lead.id} · {lead.source} · Campaign preserved
           </p>
-          <Button variant="outline" onClick={() => setOpen(false)}>
+          <Button variant="outline" onClick={() => setOpen(false)} disabled={submitting}>
             Cancel
           </Button>
-          <Button onClick={submit}>
-            Convert lead <ArrowRight className="size-4" />
+          <Button onClick={() => void submit()} disabled={submitting}>
+            {submitting ? "Converting…" : "Convert lead"}
+            {!submitting && <ArrowRight className="size-4" />}
           </Button>
         </DialogFooter>
       </DialogContent>

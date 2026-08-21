@@ -57,7 +57,7 @@ function OpportunityDetailPage() {
   const isClosed = opp.stage === "Won" || opp.stage === "Lost";
 
   // Stage pipeline steps (open stages only)
-  const openStages: OpportunityStage[] = ["Discovery", "Proposal", "Negotiation"];
+  const openStages: OpportunityStage[] = ["Discovery", "Demo", "Proposal", "Negotiation"];
   const currentIdx = openStages.indexOf(opp.stage as OpportunityStage);
 
   return (
@@ -95,8 +95,16 @@ function OpportunityDetailPage() {
               </>
             )}
             <LogInteractionDialog
-              trigger={<Button size="sm" variant={isClosed ? "default" : "outline"}>Log interaction</Button>}
-              related={{ opportunityId, accountId: opp.account_id, contactId: opp.primary_contact_id }}
+              trigger={
+                <Button size="sm" variant={isClosed ? "default" : "outline"}>
+                  Log interaction
+                </Button>
+              }
+              related={{
+                opportunityId,
+                accountId: opp.account_id,
+                contactId: opp.primary_contact_id,
+              }}
             />
           </>
         }
@@ -107,9 +115,7 @@ function OpportunityDetailPage() {
         <div className="flex items-center gap-1">
           {OPPORTUNITY_STAGES.map((stage, idx) => {
             const isCurrent = opp.stage === stage;
-            const isPast =
-              OPPORTUNITY_STAGES.indexOf(opp.stage) > idx &&
-              opp.stage !== "Lost";
+            const isPast = OPPORTUNITY_STAGES.indexOf(opp.stage) > idx && opp.stage !== "Lost";
             const isWon = stage === "Won" && opp.stage === "Won";
             const isLost = stage === "Lost" && opp.stage === "Lost";
 
@@ -173,8 +179,8 @@ function OpportunityDetailPage() {
               : "border-destructive/25 bg-destructive/5 text-destructive",
           )}
         >
-          {opp.stage === "Won" ? "🎉 Deal won" : "Deal lost"} ·{" "}
-          {formatDate(opp.closed_at)} · {formatCurrency(opp.amount)}
+          {opp.stage === "Won" ? "🎉 Deal won" : "Deal lost"} · {formatDate(opp.closed_at)} ·{" "}
+          {formatCurrency(opp.amount)}
         </div>
       )}
 
@@ -187,8 +193,17 @@ function OpportunityDetailPage() {
               <DetailRow
                 label="Amount"
                 value={
-                  <span className="font-display font-semibold">{formatCurrency(opp.amount)}</span>
+                  <span className="font-display font-semibold">
+                    {opp.amount_high && opp.amount_high > opp.amount
+                      ? `${formatCurrency(opp.amount_low ?? opp.amount)} – ${formatCurrency(opp.amount_high)}`
+                      : formatCurrency(opp.amount)}
+                  </span>
                 }
+              />
+              <DetailRow label="Base licensing amount" value={formatCurrency(opp.amount)} />
+              <DetailRow
+                label="Machines"
+                value={`${opp.boba_machine_qty} Boba · ${opp.ramen_machine_qty} Ramen`}
               />
               <DetailRow label="Probability" value={`${opp.probability}%`} />
               <DetailRow
@@ -196,10 +211,7 @@ function OpportunityDetailPage() {
                 value={formatCurrency((opp.amount * opp.probability) / 100)}
               />
               <DetailRow label="Close date" value={formatShortDate(opp.expected_close_date)} />
-              <DetailRow
-                label="Time to close"
-                value={relativeDay(opp.expected_close_date)}
-              />
+              <DetailRow label="Time to close" value={relativeDay(opp.expected_close_date)} />
               <DetailRow label="Owner" value={userName(db, opp.owner_user_id)} />
               <DetailRow label="Region" value={opp.region} />
               <DetailRow label="Created" value={formatDate(opp.created_at)} />
@@ -255,7 +267,11 @@ function OpportunityDetailPage() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <StatCard label="Amount" value={formatCurrency(opp.amount)} tone="success" />
             <StatCard label="Probability" value={`${opp.probability}%`} />
-            <StatCard label="Open tasks" value={openTasks.length} tone={openTasks.length > 2 ? "warning" : "default"} />
+            <StatCard
+              label="Open tasks"
+              value={openTasks.length}
+              tone={openTasks.length > 2 ? "warning" : "default"}
+            />
           </div>
 
           <Panel

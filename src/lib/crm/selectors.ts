@@ -11,6 +11,7 @@ import type {
   Interaction,
   Lead,
   LeadLifecycleStage,
+  LeadSource,
   Opportunity,
   OpportunityStage,
   Task,
@@ -54,9 +55,13 @@ export function bucketTasks(tasks: Task[]): TaskBuckets {
   const t = todayIso();
   const open = tasks.filter((x) => x.status === "Open");
   return {
-    overdue: open.filter((x) => x.due_date < t).sort((a, b) => a.due_date.localeCompare(b.due_date)),
+    overdue: open
+      .filter((x) => x.due_date < t)
+      .sort((a, b) => a.due_date.localeCompare(b.due_date)),
     dueToday: open.filter((x) => x.due_date === t),
-    upcoming: open.filter((x) => x.due_date > t).sort((a, b) => a.due_date.localeCompare(b.due_date)),
+    upcoming: open
+      .filter((x) => x.due_date > t)
+      .sort((a, b) => a.due_date.localeCompare(b.due_date)),
     completed: tasks.filter((x) => x.status === "Completed"),
   };
 }
@@ -120,7 +125,14 @@ export function leadSourcePerformance(db: CrmDatabase, leads: Lead[]) {
 }
 
 export function pipelineByStage(opps: Opportunity[]) {
-  const stages: OpportunityStage[] = ["Discovery", "Proposal", "Negotiation", "Won", "Lost"];
+  const stages: OpportunityStage[] = [
+    "Discovery",
+    "Demo",
+    "Proposal",
+    "Negotiation",
+    "Won",
+    "Lost",
+  ];
   return stages.map((stage) => {
     const rows = opps.filter((o) => o.stage === stage);
     return { stage, count: rows.length, amount: sumAmount(rows) };
@@ -143,7 +155,8 @@ export function scoreDistribution(accounts: Account[]) {
   ];
   return buckets.map((b) => ({
     name: b.name,
-    total: accounts.filter((a) => a.account_fit_score >= b.min && a.account_fit_score <= b.max).length,
+    total: accounts.filter((a) => a.account_fit_score >= b.min && a.account_fit_score <= b.max)
+      .length,
   }));
 }
 
@@ -221,8 +234,8 @@ export function globalSearch(db: CrmDatabase, query: string, limit = 8): SearchH
         id: c.id,
         title: `${c.first_name} ${c.last_name}`,
         subtitle: `${c.title ?? "Contact"} · ${accountName(db, c.account_id)}`,
-        to: "/accounts/$accountId",
-        params: { accountId: c.account_id },
+        to: "/contacts/$contactId",
+        params: { contactId: c.id },
       }),
     );
 
@@ -304,7 +317,12 @@ export function formatCurrency(value: number, compact = true): string {
 export function formatDate(iso?: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso.length === 10 ? `${iso}T00:00:00Z` : iso);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 export function formatShortDate(iso?: string | null): string {
@@ -325,4 +343,170 @@ export function relativeDay(iso?: string | null): string {
   if (diff === 1) return "Tomorrow";
   if (diff < 0) return `${Math.abs(diff)}d overdue`;
   return `in ${diff}d`;
+}
+
+// ── Lead scoring ──────────────────────────────────────────────
+// Mirrors the `compute_lead_score()` DB trigger (009_lead_lifecycle.sql),
+// which is the authoritative value — this is only a live preview while a
+// rep fills in the New Lead form.
+const LEAD_SOURCE_SCORE: Record<LeadSource, number> = {
+  Referral: 40,
+  "Trade Show": 36,
+  Partner: 34,
+  "Event Registration": 32,
+  "Wix Website Inquiry": 28,
+  LinkedIn: 22,
+  Outbound: 18,
+  "Other Campaign": 16,
+  "Manual Entry": 14,
+  "Social Media": 10,
+};
+
+export function computeLeadScore(input: {
+  source: LeadSource;
+  phone?: string | null | undefined;
+  title?: string | null | undefined;
+  company_domain?: string | null | undefined;
+  last_contacted_at?: string | null | undefined;
+}): number {
+  let score = LEAD_SOURCE_SCORE[input.source] ?? 10;
+  if (input.phone?.trim()) score += 15;
+  if (input.title?.trim()) score += 15;
+  if (input.company_domain?.trim()) score += 15;
+  if (input.last_contacted_at) score += 15;
+  return Math.min(100, Math.max(0, score));
+}
+
+// ── Duplicate lead detection ─────────────────────────────────────
+export interface LeadDuplicateMatch {
+  kind: "lead" | "account";
+  id: ID;
+  label: string;
+  detail: string;
+  reason: string;
+}
+
+export function findLeadDuplicates(
+  db: CrmDatabase,
+  input: { email?: string; companyDomain?: string; companyName?: string },
+): LeadDuplicateMatch[] {
+  const email = (input.email ?? "").trim().toLowerCase();
+  const domain = (input.companyDomain ?? "").trim().toLowerCase();
+  const companyName = (input.companyName ?? "").trim().toLowerCase();
+  if (!email && !domain && !companyName) return [];
+
+  const matches: LeadDuplicateMatch[] = [];
+
+  for (const l of db.leads) {
+    if (l.lifecycle_stage === "Disqualified") continue;
+    const sameEmail = !!email && l.email.toLowerCase() === email;
+    const sameDomain = !!domain && (l.company_domain ?? "").toLowerCase() === domain;
+    if (sameEmail || sameDomain) {
+      matches.push({
+        kind: "lead",
+        id: l.id,
+        label: `${l.first_name} ${l.last_name} — ${l.company_name}`,
+        detail: l.lifecycle_stage,
+        reason: sameEmail ? "Same email" : "Same company domain",
+      });
+    }
+  }
+
+  for (const a of db.accounts) {
+    const sameDomain = !!domain && (a.domain ?? "").toLowerCase() === domain;
+    const sameName = !!companyName && a.name.trim().toLowerCase() === companyName;
+    if (sameDomain || sameName) {
+      matches.push({
+        kind: "account",
+        id: a.id,
+        label: a.name,
+        detail: a.status,
+        reason: sameDomain ? "Same company domain" : "Same company name",
+      });
+    }
+  }
+
+  return matches;
+}
+
+// ── Account fit-score rubric ──────────────────────────────────
+// Mirrors the `compute_account_fit_score()` DB trigger (012). Six 0-5
+// criteria, summed out of 30, scaled to 0-100. Live preview only while a
+// rep fills in the New Account form — the DB trigger is authoritative.
+export interface AccountFitCriteria {
+  foot_traffic_score?: number | null | undefined;
+  utility_readiness_score?: number | null | undefined;
+  brand_alignment_score?: number | null | undefined;
+  contract_complexity_score?: number | null | undefined;
+  decision_maker_accessibility_score?: number | null | undefined;
+  expansion_potential_score?: number | null | undefined;
+}
+
+export function computeAccountFitScore(c: AccountFitCriteria): number | null {
+  const values = [
+    c.foot_traffic_score,
+    c.utility_readiness_score,
+    c.brand_alignment_score,
+    c.contract_complexity_score,
+    c.decision_maker_accessibility_score,
+    c.expansion_potential_score,
+  ];
+  if (values.some((v) => v === null || v === undefined)) return null;
+  const sum = (values as number[]).reduce((a, b) => a + b, 0);
+  return Math.round((sum * 100) / 30);
+}
+
+// ── Opportunity amount from machine count ────────────────────────
+// Mirrors the `compute_opportunity_amount()` DB trigger (016): 36-month
+// TCV on the recurring rate, plus a flat one-time setup fee per machine.
+export function computeOpportunityAmount(input: {
+  boba_machine_qty: number;
+  ramen_machine_qty: number;
+}): number {
+  const boba = input.boba_machine_qty || 0;
+  const ramen = input.ramen_machine_qty || 0;
+  return 36 * (boba * 12575 + ramen * 7000) + (boba + ramen) * 10000;
+}
+
+// Mirrors the compute_opportunity_amount DB trigger (migration 020).
+// Projected retail revenue = machine qty × daily unit sales × RSP ×
+// operating days/year × 3 years, layered on top of the base licensing
+// amount. Inputs default to 0 until real assumptions are entered, so
+// low/high just equal the base amount — this is scaffolding for
+// Amanda's worksheet (low/high RSP + volume per vertical), not a guess.
+// Fixed YKE menu pricing (per Cindy, 2026-08-19) — not rep-editable.
+export const BOBA_RSP_LOW = 5.5;
+export const BOBA_RSP_HIGH = 7.0;
+export const RAMEN_RSP_LOW = 12.99;
+export const RAMEN_RSP_HIGH = 14.99;
+export const DEFAULT_DAILY_BOBA_UNITS_LOW = 50;
+export const DEFAULT_DAILY_BOBA_UNITS_HIGH = 100;
+export const DEFAULT_DAILY_RAMEN_UNITS_LOW = 30;
+export const DEFAULT_DAILY_RAMEN_UNITS_HIGH = 75;
+
+export function computeOpportunityAmountRange(input: {
+  boba_machine_qty: number;
+  ramen_machine_qty: number;
+  avg_daily_boba_units_low?: number | undefined;
+  avg_daily_boba_units_high?: number | undefined;
+  avg_daily_ramen_units_low?: number | undefined;
+  avg_daily_ramen_units_high?: number | undefined;
+  operating_days_per_year?: number | null | undefined;
+}): { base: number; low: number; high: number } {
+  const base = computeOpportunityAmount(input);
+  const boba = input.boba_machine_qty || 0;
+  const ramen = input.ramen_machine_qty || 0;
+  const days = input.operating_days_per_year ?? 0;
+
+  const low =
+    base +
+    boba * (input.avg_daily_boba_units_low ?? 0) * BOBA_RSP_LOW * days * 3 +
+    ramen * (input.avg_daily_ramen_units_low ?? 0) * RAMEN_RSP_LOW * days * 3;
+
+  const high =
+    base +
+    boba * (input.avg_daily_boba_units_high ?? 0) * BOBA_RSP_HIGH * days * 3 +
+    ramen * (input.avg_daily_ramen_units_high ?? 0) * RAMEN_RSP_HIGH * days * 3;
+
+  return { base, low, high };
 }

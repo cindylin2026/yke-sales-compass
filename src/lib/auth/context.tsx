@@ -52,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .join("")
             .slice(0, 2)
             .toUpperCase(),
+        active: data.active,
       });
     }
   }, []);

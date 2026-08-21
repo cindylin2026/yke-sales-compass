@@ -1,6 +1,9 @@
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Check, Undo2 } from "lucide-react";
+import { Check, Clock, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { PriorityDot, TypeBadge } from "@/components/crm/badges";
 import { EmptyState } from "@/components/crm/ui-bits";
 import { useCrm } from "@/lib/crm/provider";
@@ -8,12 +11,58 @@ import { accountName, formatShortDate, relativeDay, userName } from "@/lib/crm/s
 import type { Task } from "@/lib/crm/types";
 import { cn } from "@/lib/utils";
 
+function RescheduleButton({ task }: { task: Task }) {
+  const { rescheduleTask } = useCrm();
+  const [open, setOpen] = useState(false);
+  const [date, setDate] = useState(task.due_date);
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v);
+        if (v) setDate(task.due_date);
+      }}
+    >
+      <PopoverTrigger asChild>
+        <Button
+          size="icon"
+          variant="outline"
+          className="mt-0.5 size-7 shrink-0 rounded-full"
+          aria-label="Reschedule task"
+        >
+          <Clock className="size-3.5" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 space-y-2.5">
+        <p className="text-xs font-medium text-muted-foreground">Reschedule to</p>
+        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        <Button
+          size="sm"
+          className="w-full"
+          disabled={!date}
+          onClick={() => {
+            rescheduleTask(task.id, date);
+            setOpen(false);
+          }}
+        >
+          Save
+        </Button>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function RelatedLink({ task }: { task: Task }) {
   const { db } = useCrm();
   if (task.lead_id) {
     const lead = db.leads.find((l) => l.id === task.lead_id);
     return (
-      <Link to="/leads/$leadId" params={{ leadId: task.lead_id }} className="hover:text-ember hover:underline">
+      <Link
+        to="/leads/$leadId"
+        params={{ leadId: task.lead_id }}
+        className="hover:text-ember hover:underline"
+      >
         Lead · {lead ? `${lead.first_name} ${lead.last_name}` : task.lead_id}
       </Link>
     );
@@ -55,15 +104,18 @@ export function TaskList({
             key={task.id}
             className={cn("flex items-start gap-3", dense ? "py-2" : "py-3", done && "opacity-60")}
           >
-            <Button
-              size="icon"
-              variant={done ? "secondary" : "outline"}
-              className="mt-0.5 size-7 shrink-0 rounded-full"
-              onClick={() => (done ? reopenTask(task.id) : completeTask(task.id))}
-              aria-label={done ? "Reopen task" : "Complete task"}
-            >
-              {done ? <Undo2 className="size-3.5" /> : <Check className="size-3.5" />}
-            </Button>
+            <div className="flex shrink-0 flex-col gap-1.5">
+              <Button
+                size="icon"
+                variant={done ? "secondary" : "outline"}
+                className="size-7 rounded-full"
+                onClick={() => (done ? reopenTask(task.id) : completeTask(task.id))}
+                aria-label={done ? "Reopen task" : "Complete task"}
+              >
+                {done ? <Undo2 className="size-3.5" /> : <Check className="size-3.5" />}
+              </Button>
+              {!done && <RescheduleButton task={task} />}
+            </div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <PriorityDot priority={task.priority} />

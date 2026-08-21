@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -15,11 +15,21 @@ import {
   Cell,
   Legend,
 } from "recharts";
-import { AlertTriangle, ArrowRight, Users } from "lucide-react";
+import { AlertTriangle, ArrowRight, Clipboard, Download, Users } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { PageHeader, Panel, StatCard, EmptyState, DetailRow } from "@/components/crm/ui-bits";
 import { LifecycleBadge, StageBadge } from "@/components/crm/badges";
 import { useCrm } from "@/lib/crm/provider";
+import { downloadCsv } from "@/lib/crm/csv";
+import { REGIONS, type Region } from "@/lib/crm/types";
 import {
   bucketTasks,
   exceptions,
@@ -27,6 +37,7 @@ import {
   formatShortDate,
   groupSum,
   leadName,
+  leadSourcePerformance,
   openPipeline,
   pipelineByStage,
   scoreDistribution,
@@ -45,6 +56,7 @@ export const Route = createFileRoute("/dashboard")({
 
 const STAGE_COLORS: Record<string, string> = {
   Discovery: "var(--info)",
+  Demo: "#a78bfa",
   Proposal: "var(--ember)",
   Negotiation: "var(--warning)",
   Won: "var(--success)",
@@ -64,11 +76,44 @@ const PIE_COLORS = [
 
 export default function DashboardPage() {
   const { db } = useCrm();
+  const [regionFilter, setRegionFilter] = useState<Region | "all">("all");
 
-  const allOpps = db.opportunities;
+  // Everything below is scoped to the selected region — each record type
+  // carries its own `region` field, so we filter each independently rather
+  // than joining through accounts. Tasks don't carry a region directly, so
+  // they're scoped via whichever account/lead/opportunity they're attached
+  // to (untethered tasks are excluded from a region-specific view, since
+  // there's nothing to attribute them to).
+  const scopedAccounts = useMemo(
+    () =>
+      regionFilter === "all" ? db.accounts : db.accounts.filter((a) => a.region === regionFilter),
+    [db.accounts, regionFilter],
+  );
+  const allOpps = useMemo(
+    () =>
+      regionFilter === "all"
+        ? db.opportunities
+        : db.opportunities.filter((o) => o.region === regionFilter),
+    [db.opportunities, regionFilter],
+  );
+  const allLeads = useMemo(
+    () => (regionFilter === "all" ? db.leads : db.leads.filter((l) => l.region === regionFilter)),
+    [db.leads, regionFilter],
+  );
+  const allTasks = useMemo(() => {
+    if (regionFilter === "all") return db.tasks;
+    const accountIds = new Set(scopedAccounts.map((a) => a.id));
+    const leadIds = new Set(allLeads.map((l) => l.id));
+    const oppIds = new Set(allOpps.map((o) => o.id));
+    return db.tasks.filter(
+      (t) =>
+        (t.account_id && accountIds.has(t.account_id)) ||
+        (t.lead_id && leadIds.has(t.lead_id)) ||
+        (t.opportunity_id && oppIds.has(t.opportunity_id)),
+    );
+  }, [db.tasks, regionFilter, scopedAccounts, allLeads, allOpps]);
+
   const open = openPipeline(allOpps);
-  const allTasks = db.tasks;
-  const allLeads = db.leads;
 
   const exc = useMemo(
     () => exceptions(db, allOpps, allTasks, allLeads),
@@ -78,12 +123,14 @@ export default function DashboardPage() {
   const buckets = useMemo(() => bucketTasks(allTasks), [allTasks]);
   const stageData = useMemo(() => pipelineByStage(open), [open]);
   const revenueByMonth = useMemo(() => wonRevenueByMonth(allOpps), [allOpps]);
-  const scoreDist = useMemo(() => scoreDistribution(db.accounts), [db.accounts]);
+  const scoreDist = useMemo(() => scoreDistribution(scopedAccounts), [scopedAccounts]);
 
-  // Pipeline by rep
+  // Pipeline by rep — scoped to the region filter by the rep's home region
   const pipelineByRep = useMemo(() => {
     return db.users
-      .filter((u) => u.role === "sales_rep")
+      .filter(
+        (u) => u.role === "sales_rep" && (regionFilter === "all" || u.region === regionFilter),
+      )
       .map((u) => {
         const myOpen = open.filter((o) => o.owner_user_id === u.id);
         const myLeads = allLeads.filter((l) => l.owner_user_id === u.id);
@@ -96,14 +143,16 @@ export default function DashboardPage() {
           openCount: myOpen.length,
           pipelineValue: sumAmount(myOpen),
           weightedValue: weightedAmount(myOpen),
-          wonAmount: sumAmount(allOpps.filter((o) => o.stage === "Won" && o.owner_user_id === u.id)),
+          wonAmount: sumAmount(
+            allOpps.filter((o) => o.stage === "Won" && o.owner_user_id === u.id),
+          ),
           openLeads: myLeads.filter(
             (l) => l.lifecycle_stage !== "Converted" && l.lifecycle_stage !== "Disqualified",
           ).length,
           overdueTasks: myBuckets.overdue.length,
         };
       });
-  }, [db.users, open, allLeads, allTasks, allOpps]);
+  }, [db.users, regionFilter, open, allLeads, allTasks, allOpps]);
 
   // Segment breakdown
   const segmentPipeline = useMemo(
@@ -125,16 +174,150 @@ export default function DashboardPage() {
     }));
   }, [allLeads]);
 
+  const sourcePerf = useMemo(() => leadSourcePerformance(db, allLeads), [db, allLeads]);
+  const convertedCount = allLeads.filter((l) => l.lifecycle_stage === "Converted").length;
+  const conversionRate = allLeads.length ? convertedCount / allLeads.length : 0;
+
+  // Weekly summary — auto-generated fresh each time this page loads,
+  // trailing 7 days from now. No email/cron backend yet, so this is the
+  // report surface for management; "Copy" formats it for pasting into
+  // email/Slack, "Export CSV" opens directly in Excel/Sheets.
+  const weeklySummary = useMemo(() => {
+    const since = new Date();
+    since.setDate(since.getDate() - 7);
+    const sinceIso = since.toISOString();
+    const now = new Date().toISOString();
+
+    const newLeads = allLeads.filter((l) => l.created_at >= sinceIso);
+    const convertedThisWeek = allLeads.filter((l) => l.converted_at && l.converted_at >= sinceIso);
+    const newOppsThisWeek = allOpps.filter((o) => o.created_at >= sinceIso);
+    const wonThisWeek = allOpps.filter(
+      (o) => o.stage === "Won" && o.closed_at && o.closed_at >= sinceIso,
+    );
+    const lostThisWeek = allOpps.filter(
+      (o) => o.stage === "Lost" && o.closed_at && o.closed_at >= sinceIso,
+    );
+
+    return {
+      periodLabel: `${formatShortDate(sinceIso)} – ${formatShortDate(now)}`,
+      newLeadsCount: newLeads.length,
+      convertedCount: convertedThisWeek.length,
+      newOppsCount: newOppsThisWeek.length,
+      newPipelineValue: sumAmount(newOppsThisWeek),
+      wonCount: wonThisWeek.length,
+      wonValue: sumAmount(wonThisWeek),
+      lostCount: lostThisWeek.length,
+      overdueTasks: buckets.overdue.length,
+    };
+  }, [allLeads, allOpps, buckets]);
+
+  const weeklySummaryText = [
+    `YKE Weekly Sales Summary — ${weeklySummary.periodLabel}`,
+    `New leads: ${weeklySummary.newLeadsCount}`,
+    `Leads converted to accounts: ${weeklySummary.convertedCount}`,
+    `New opportunities: ${weeklySummary.newOppsCount} (${formatCurrency(weeklySummary.newPipelineValue)} added to pipeline)`,
+    `Won: ${weeklySummary.wonCount} deals (${formatCurrency(weeklySummary.wonValue)})`,
+    `Lost: ${weeklySummary.lostCount} deals`,
+    `Overdue follow-up tasks: ${weeklySummary.overdueTasks}`,
+    `Total open pipeline: ${formatCurrency(sumAmount(open))} (${formatCurrency(weightedAmount(open))} weighted)`,
+  ].join("\n");
+
   return (
     <>
       <PageHeader
         eyebrow="Manager view"
         title="Manager Dashboard"
         description="Full-funnel visibility — pipeline health, rep performance, and exception queues."
+        actions={
+          <Select value={regionFilter} onValueChange={(v) => setRegionFilter(v as Region | "all")}>
+            <SelectTrigger className="w-[170px]">
+              <SelectValue placeholder="Region" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All regions</SelectItem>
+              {REGIONS.map((r) => (
+                <SelectItem key={r} value={r}>
+                  {r}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        }
       />
 
+      {/* Weekly summary report */}
+      <Panel
+        title="Weekly summary"
+        description={`Auto-generated · ${weeklySummary.periodLabel}`}
+        className="mb-5"
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                void navigator.clipboard.writeText(weeklySummaryText);
+                toast.success("Copied weekly summary", {
+                  description: "Paste it into an email or Slack message.",
+                });
+              }}
+            >
+              <Clipboard className="size-3.5" /> Copy
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                downloadCsv(`weekly-summary-${new Date().toISOString().slice(0, 10)}.csv`, [
+                  {
+                    period: weeklySummary.periodLabel,
+                    new_leads: weeklySummary.newLeadsCount,
+                    converted: weeklySummary.convertedCount,
+                    new_opportunities: weeklySummary.newOppsCount,
+                    new_pipeline_value: weeklySummary.newPipelineValue,
+                    won_deals: weeklySummary.wonCount,
+                    won_value: weeklySummary.wonValue,
+                    lost_deals: weeklySummary.lostCount,
+                    overdue_tasks: weeklySummary.overdueTasks,
+                  },
+                ])
+              }
+            >
+              <Download className="size-3.5" /> Export CSV
+            </Button>
+          </div>
+        }
+      >
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+          <StatCard label="New leads" value={weeklySummary.newLeadsCount} />
+          <StatCard label="Converted" value={weeklySummary.convertedCount} tone="brand" />
+          <StatCard
+            label="New opps"
+            value={weeklySummary.newOppsCount}
+            hint={formatCurrency(weeklySummary.newPipelineValue)}
+          />
+          <StatCard
+            label="Won"
+            value={weeklySummary.wonCount}
+            hint={formatCurrency(weeklySummary.wonValue)}
+            tone="success"
+          />
+          <StatCard label="Lost" value={weeklySummary.lostCount} tone="danger" />
+          <StatCard
+            label="Overdue tasks"
+            value={weeklySummary.overdueTasks}
+            tone={weeklySummary.overdueTasks > 0 ? "warning" : "default"}
+          />
+          <StatCard
+            label="Total open pipeline"
+            value={formatCurrency(sumAmount(open))}
+            tone="success"
+          />
+        </div>
+      </Panel>
+
       {/* Top KPIs */}
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-7">
         <StatCard
           label="Total pipeline"
           value={formatCurrency(sumAmount(open))}
@@ -171,6 +354,12 @@ export default function DashboardPage() {
           value={exc.noNextAction.length}
           tone={exc.noNextAction.length > 0 ? "warning" : "default"}
           hint="Open opps"
+        />
+        <StatCard
+          label="Conversion rate"
+          value={`${(conversionRate * 100).toFixed(1)}%`}
+          hint={`${convertedCount} of ${allLeads.length} leads`}
+          tone="brand"
         />
       </div>
 
@@ -330,11 +519,40 @@ export default function DashboardPage() {
             </div>
           </Panel>
 
+          {/* Leads by source */}
+          <Panel title="Leads by source" description="Volume and funnel conversion per channel">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-xs text-muted-foreground">
+                  <tr>
+                    <th className="pb-2 text-left font-medium">Source</th>
+                    <th className="pb-2 text-right font-medium">Leads</th>
+                    <th className="pb-2 text-right font-medium">MQL</th>
+                    <th className="pb-2 text-right font-medium">SQL</th>
+                    <th className="pb-2 text-right font-medium">Converted</th>
+                    <th className="pb-2 text-right font-medium">Conv. rate</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {sourcePerf.map((s) => (
+                    <tr key={s.source} className="hover:bg-surface-muted">
+                      <td className="py-2.5 font-medium">{s.source}</td>
+                      <td className="py-2.5 text-right text-muted-foreground">{s.volume}</td>
+                      <td className="py-2.5 text-right text-muted-foreground">{s.mql}</td>
+                      <td className="py-2.5 text-right text-muted-foreground">{s.sql}</td>
+                      <td className="py-2.5 text-right text-muted-foreground">{s.converted}</td>
+                      <td className="py-2.5 text-right font-medium tabular-nums">
+                        {(s.convRate * 100).toFixed(0)}%
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+
           {/* Won revenue by month */}
-          <Panel
-            title="Won revenue by month"
-            description="Closed-won deal value over time"
-          >
+          <Panel title="Won revenue by month" description="Closed-won deal value over time">
             {revenueByMonth.length > 0 ? (
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={revenueByMonth} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
@@ -404,10 +622,7 @@ export default function DashboardPage() {
                   {stageData
                     .filter((s) => s.stage !== "Won" && s.stage !== "Lost")
                     .map((entry) => (
-                      <Cell
-                        key={entry.stage}
-                        fill={STAGE_COLORS[entry.stage] ?? "var(--ember)"}
-                      />
+                      <Cell key={entry.stage} fill={STAGE_COLORS[entry.stage] ?? "var(--ember)"} />
                     ))}
                 </Bar>
               </BarChart>
@@ -479,11 +694,7 @@ export default function DashboardPage() {
                     fontSize: 12,
                   }}
                 />
-                <Legend
-                  iconSize={8}
-                  iconType="circle"
-                  wrapperStyle={{ fontSize: 11 }}
-                />
+                <Legend iconSize={8} iconType="circle" wrapperStyle={{ fontSize: 11 }} />
               </PieChart>
             </ResponsiveContainer>
           </Panel>
@@ -492,7 +703,7 @@ export default function DashboardPage() {
           <Panel title="Account fit score" description="ICP alignment spread">
             <div className="space-y-2">
               {scoreDist.map((b) => {
-                const pct = db.accounts.length ? (b.total / db.accounts.length) * 100 : 0;
+                const pct = scopedAccounts.length ? (b.total / scopedAccounts.length) * 100 : 0;
                 return (
                   <div key={b.name}>
                     <div className="mb-0.5 flex justify-between text-xs">

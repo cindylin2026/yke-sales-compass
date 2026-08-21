@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { Download, Search } from "lucide-react";
+import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +14,7 @@ import {
 import { PageHeader, Panel, StatCard, EmptyState } from "@/components/crm/ui-bits";
 import { TaskList } from "@/components/crm/TaskList";
 import { useCrm } from "@/lib/crm/provider";
+import { downloadCsv } from "@/lib/crm/csv";
 import { bucketTasks, scopeForUser } from "@/lib/crm/selectors";
 import { TASK_TYPES, type TaskType } from "@/lib/crm/types";
 import { cn } from "@/lib/utils";
@@ -78,6 +80,19 @@ function TasksPage() {
         eyebrow="Follow-up queue"
         title="Follow-ups"
         description="Commitments you've made. Clear the overdue queue first, then today's tasks."
+        actions={
+          <Button
+            variant="outline"
+            onClick={() => {
+              downloadCsv(`tasks-${new Date().toISOString().slice(0, 10)}.csv`, filtered);
+              toast.success(`Exported ${filtered.length} tasks`, {
+                description: "Opens directly in Excel or Google Sheets.",
+              });
+            }}
+          >
+            <Download className="size-4" /> Export CSV
+          </Button>
+        }
       />
 
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -89,7 +104,12 @@ function TasksPage() {
         />
         <StatCard label="Due today" value={buckets.dueToday.length} tone="warning" />
         <StatCard label="Upcoming" value={buckets.upcoming.length} />
-        <StatCard label="Completed" value={buckets.completed.length} tone="success" hint="All time" />
+        <StatCard
+          label="Completed"
+          value={buckets.completed.length}
+          tone="success"
+          hint="All time"
+        />
       </div>
 
       {/* Tabs */}
@@ -143,7 +163,9 @@ function TasksPage() {
             <SelectContent>
               <SelectItem value="all">All types</SelectItem>
               {TASK_TYPES.map((t) => (
-                <SelectItem key={t} value={t}>{t}</SelectItem>
+                <SelectItem key={t} value={t}>
+                  {t}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>

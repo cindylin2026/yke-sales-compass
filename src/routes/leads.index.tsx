@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { Download, Search } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -13,9 +14,26 @@ import {
 import { PageHeader, Panel, EmptyState } from "@/components/crm/ui-bits";
 import { LeadScore, LifecycleBadge, SourceBadge } from "@/components/crm/badges";
 import { useCrm } from "@/lib/crm/provider";
+import { downloadCsv } from "@/lib/crm/csv";
 import { formatShortDate, leadName, relativeDay, userName } from "@/lib/crm/selectors";
-import { LEAD_SOURCES, LEAD_STAGES, type LeadLifecycleStage } from "@/lib/crm/types";
+import {
+  ACCOUNT_SEGMENTS,
+  REGIONS,
+  LEAD_SOURCES,
+  LEAD_STAGES,
+  type AccountSegment,
+  type LeadLifecycleStage,
+  type Region,
+} from "@/lib/crm/types";
 import { cn } from "@/lib/utils";
+
+const MIN_SCORE_OPTIONS = [
+  { value: "0", label: "Any score" },
+  { value: "80", label: "80+" },
+  { value: "60", label: "60+" },
+  { value: "40", label: "40+" },
+  { value: "20", label: "20+" },
+];
 
 export const Route = createFileRoute("/leads/")({
   head: () => ({
@@ -29,7 +47,8 @@ export const Route = createFileRoute("/leads/")({
       { property: "og:title", content: "Leads — Yo-Kai Express Sales OS" },
       {
         property: "og:description",
-        content: "Qualify and route inbound and outbound leads through the MQL → SAL → SQL lifecycle.",
+        content:
+          "Qualify and route inbound and outbound leads through the MQL → SAL → SQL lifecycle.",
       },
     ],
   }),
@@ -41,7 +60,18 @@ function LeadsPage() {
   const [query, setQuery] = useState("");
   const [stage, setStage] = useState<LeadLifecycleStage | "all">("all");
   const [source, setSource] = useState<string>("all");
-  const [owner, setOwner] = useState<string>(currentUser.role === "sales_rep" ? currentUser.id : "all");
+  const [region, setRegion] = useState<Region | "all">("all");
+  const [market, setMarket] = useState<string>("all");
+  const [segment, setSegment] = useState<AccountSegment | "all">("all");
+  const [minScore, setMinScore] = useState("0");
+  const [owner, setOwner] = useState<string>(
+    currentUser.role === "sales_rep" ? currentUser.id : "all",
+  );
+
+  const markets = useMemo(
+    () => Array.from(new Set(db.leads.map((l) => l.market).filter(Boolean))) as string[],
+    [db.leads],
+  );
 
   const stageCounts = useMemo(() => {
     const map: Record<string, number> = {};
@@ -56,8 +86,16 @@ function LeadsPage() {
     return db.leads
       .filter((l) => (stage === "all" ? true : l.lifecycle_stage === stage))
       .filter((l) => (source === "all" ? true : l.source === source))
+      .filter((l) => (region === "all" ? true : l.region === region))
+      .filter((l) => (market === "all" ? true : l.market === market))
+      .filter((l) => (segment === "all" ? true : l.segment === segment))
+      .filter((l) => l.lead_score >= Number(minScore))
       .filter((l) =>
-        owner === "all" ? true : owner === "unassigned" ? !l.owner_user_id : l.owner_user_id === owner,
+        owner === "all"
+          ? true
+          : owner === "unassigned"
+            ? !l.owner_user_id
+            : l.owner_user_id === owner,
       )
       .filter((l) =>
         !q
@@ -67,7 +105,7 @@ function LeadsPage() {
             l.email.toLowerCase().includes(q),
       )
       .sort((a, b) => b.lead_score - a.lead_score);
-  }, [db.leads, query, stage, source, owner]);
+  }, [db.leads, query, stage, source, region, market, segment, minScore, owner]);
 
   return (
     <>
@@ -76,9 +114,22 @@ function LeadsPage() {
         title="Leads"
         description="A lead is meaningful commercial interest — not a like or a follow. Qualify it, then convert it."
         actions={
-          <Button asChild>
-            <Link to="/leads/new">New lead</Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                downloadCsv(`leads-${new Date().toISOString().slice(0, 10)}.csv`, rows);
+                toast.success(`Exported ${rows.length} leads`, {
+                  description: "Opens directly in Excel or Google Sheets.",
+                });
+              }}
+            >
+              <Download className="size-4" /> Export CSV
+            </Button>
+            <Button asChild>
+              <Link to="/leads/new">New lead</Link>
+            </Button>
+          </div>
         }
       />
 
@@ -132,6 +183,47 @@ function LeadsPage() {
               ))}
             </SelectContent>
           </Select>
+          <Select value={region} onValueChange={(v) => setRegion(v as Region | "all")}>
+            <SelectTrigger className="w-[130px]">
+              <SelectValue placeholder="Region" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All regions</SelectItem>
+              {REGIONS.map((r) => (
+                <SelectItem key={r} value={r}>
+                  {r}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {markets.length > 0 && (
+            <Select value={market} onValueChange={setMarket}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="Market" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All markets</SelectItem>
+                {markets.map((m) => (
+                  <SelectItem key={m} value={m}>
+                    {m}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Select value={segment} onValueChange={(v) => setSegment(v as AccountSegment | "all")}>
+            <SelectTrigger className="w-[170px]">
+              <SelectValue placeholder="Segment" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All segments</SelectItem>
+              {ACCOUNT_SEGMENTS.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {s}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={owner} onValueChange={setOwner}>
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Owner" />
@@ -148,6 +240,19 @@ function LeadsPage() {
                 ))}
             </SelectContent>
           </Select>
+          <Select value={minScore} onValueChange={setMinScore}>
+            <SelectTrigger className="w-[130px]">
+              <SelectValue placeholder="Lead score" />
+            </SelectTrigger>
+            <SelectContent>
+              {MIN_SCORE_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <span className="ml-auto text-xs text-muted-foreground">{rows.length} matching</span>
         </div>
 
         {rows.length ? (
@@ -168,19 +273,21 @@ function LeadsPage() {
               <tbody className="divide-y divide-border">
                 {rows.map((l) => (
                   <tr key={l.id} className="transition-colors hover:bg-surface-muted">
-                    <td className="px-4 py-2.5">
+                    <td className="max-w-[180px] px-4 py-2.5">
                       <Link
                         to="/leads/$leadId"
                         params={{ leadId: l.id }}
-                        className="font-medium hover:text-ember hover:underline"
+                        className="block truncate font-medium hover:text-ember hover:underline"
                       >
                         {leadName(l)}
                       </Link>
-                      <p className="text-xs text-muted-foreground">{l.title}</p>
+                      <p className="truncate text-xs text-muted-foreground">{l.title}</p>
                     </td>
-                    <td className="px-4 py-2.5">
-                      <p>{l.company_name}</p>
-                      <p className="text-xs text-muted-foreground">{l.region}</p>
+                    <td className="max-w-[220px] px-4 py-2.5">
+                      <p className="truncate">{l.company_name}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {l.segment ?? "Unknown"} · {l.region}
+                      </p>
                     </td>
                     <td className="px-4 py-2.5">
                       <LifecycleBadge stage={l.lifecycle_stage} />
@@ -194,7 +301,9 @@ function LeadsPage() {
                     <td className="px-4 py-2.5 text-muted-foreground">
                       {userName(db, l.owner_user_id)}
                     </td>
-                    <td className="px-4 py-2.5 text-muted-foreground">{formatShortDate(l.created_at)}</td>
+                    <td className="px-4 py-2.5 text-muted-foreground">
+                      {formatShortDate(l.created_at)}
+                    </td>
                     <td className="px-4 py-2.5 text-muted-foreground">
                       {l.last_contacted_at ? relativeDay(l.last_contacted_at) : "Never"}
                     </td>

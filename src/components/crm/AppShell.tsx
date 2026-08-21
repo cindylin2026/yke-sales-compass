@@ -12,6 +12,7 @@ import {
   MessagesSquare,
   Search,
   Target,
+  UserCog,
   Users,
 } from "lucide-react";
 import {
@@ -78,20 +79,43 @@ export function AppShell({ children }: { children: ReactNode }) {
     { to: "/opportunities", label: "Opportunities", icon: BarChart3, roles: ALL },
     { to: "/tasks", label: "Follow-ups", icon: CalendarCheck, roles: ALL, badge: dueCount },
     { to: "/interactions", label: "Interactions", icon: MessagesSquare, roles: ALL },
-    { to: "/marketing", label: "Marketing Funnel", icon: Megaphone, roles: ["marketing", "manager", "admin"] },
-    { to: "/dashboard", label: "Manager Dashboard", icon: Users, roles: ["manager", "marketing", "admin"] },
+    {
+      to: "/marketing",
+      label: "Marketing Funnel",
+      icon: Megaphone,
+      roles: ["marketing", "manager", "admin"],
+    },
+    {
+      to: "/dashboard",
+      label: "Manager Dashboard",
+      icon: Users,
+      roles: ["manager", "admin"],
+    },
+    { to: "/team", label: "Team", icon: UserCog, roles: ["admin"] },
   ];
 
   const hits = globalSearch(db, query);
   const groups = ["Account", "Contact", "Lead", "Opportunity"] as const;
 
+  const restrictedRoute = nav.find(
+    (item) =>
+      item.to !== "/" && pathname.startsWith(item.to) && !item.roles.includes(currentUser.role),
+  );
+
+  // A role-restricted page shouldn't exist for a role that can't see it —
+  // bounce straight to Sales Home instead of showing an "access restricted"
+  // message, so it behaves like the route was never there.
+  useEffect(() => {
+    if (restrictedRoute) {
+      void navigate({ to: "/" });
+    }
+  }, [restrictedRoute, navigate]);
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col bg-sidebar text-sidebar-foreground lg:flex">
         <div className="flex items-center gap-2.5 px-5 py-5">
-          <span className="grid size-9 place-items-center rounded-lg bg-ember font-display text-sm font-bold text-ember-foreground">
-            YK
-          </span>
+          <img src="/yokai-logo.png" alt="Yo-Kai Express" className="h-9 w-auto object-contain" />
           <div className="leading-tight">
             <p className="font-display text-sm font-semibold">Yo-Kai Express</p>
             <p className="text-[11px] text-sidebar-foreground/60">Sales Operating System</p>
@@ -134,7 +158,9 @@ export function AppShell({ children }: { children: ReactNode }) {
                   {currentUser.avatar_initials}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium">{currentUser.full_name}</span>
+                  <span className="block truncate text-sm font-medium">
+                    {currentUser.full_name}
+                  </span>
                   <span className="block truncate text-[11px] text-sidebar-foreground/60">
                     {currentUser.title}
                   </span>
@@ -169,7 +195,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             className="flex h-9 flex-1 items-center gap-2 rounded-lg border border-border bg-surface-muted px-3 text-sm text-muted-foreground transition-colors hover:border-ring/40 md:max-w-md"
           >
             <Search className="size-4" />
-            <span className="flex-1 text-left">Search accounts, contacts, leads, opportunities…</span>
+            <span className="flex-1 text-left">
+              Search accounts, contacts, leads, opportunities…
+            </span>
             <kbd className="hidden items-center gap-0.5 rounded border border-border bg-surface px-1.5 py-0.5 text-[10px] md:inline-flex">
               <CommandIcon className="size-3" />K
             </kbd>
@@ -177,6 +205,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="ml-auto flex items-center gap-2">
             <Button asChild size="sm" variant="outline">
               <Link to="/tasks">Today&apos;s follow-ups {dueCount > 0 ? `(${dueCount})` : ""}</Link>
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/accounts/new">New Account</Link>
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/contacts/new">New Contact</Link>
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/opportunities/new">New Opportunity</Link>
             </Button>
             <Button asChild size="sm">
               <Link to="/leads/new">New Lead</Link>
@@ -199,7 +236,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             ))}
         </nav>
 
-        <main className="mx-auto w-full max-w-[1400px] px-4 py-6 md:px-6 md:py-8">{children}</main>
+        <main className="mx-auto w-full max-w-[1400px] px-4 py-6 md:px-6 md:py-8">
+          {restrictedRoute ? null : children}
+        </main>
       </div>
 
       <CommandDialog open={searchOpen} onOpenChange={setSearchOpen}>

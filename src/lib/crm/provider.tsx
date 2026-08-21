@@ -9,20 +9,17 @@
  *  - Optimistic updates are added only where latency would hurt UX
  *    (task complete/reopen, lead stage advance).
  */
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  type ReactNode,
-} from "react";
+import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createSeedDatabase } from "./seed";
 import type {
+  Account,
+  Contact,
   ConvertLeadInput,
   ConvertLeadResult,
   CrmDatabase,
+  DisqualifyReason,
   ID,
   Interaction,
   Lead,
@@ -34,7 +31,14 @@ import type {
 import {
   fetchSnapshot,
   dbUpdateLeadStage,
+  dbCompleteOpenTasksFor,
   dbAssignLead,
+  dbCreateAccount,
+  dbUpdateAccount,
+  dbCreateContact,
+  dbUpdateLeadFitCriteria,
+  dbUpdateLeadDetails,
+  dbUpdateContact,
   dbCreateLead,
   dbConvertLead,
   dbCreateOpportunity,
@@ -44,6 +48,8 @@ import {
   dbCreateTask,
   dbCompleteTask,
   dbReopenTask,
+  dbRescheduleTask,
+  dbUpdateProfile,
 } from "@/lib/supabase/repository";
 import { useAuth } from "@/lib/auth/context";
 
@@ -59,9 +65,77 @@ interface CrmContextValue {
   isError: boolean;
   setCurrentUserId: (id: ID) => void; // kept for dev/demo switching
 
-  updateLeadStage: (leadId: ID, stage: LeadLifecycleStage, note?: string) => void;
+  updateLeadStage: (
+    leadId: ID,
+    stage: LeadLifecycleStage,
+    note?: string,
+    disqualifyReason?: DisqualifyReason,
+  ) => void;
   assignLead: (leadId: ID, ownerUserId: ID | null) => void;
+  updateLeadFitCriteria: (
+    leadId: ID,
+    criteria: Pick<
+      Lead,
+      | "foot_traffic_score"
+      | "utility_readiness_score"
+      | "brand_alignment_score"
+      | "contract_complexity_score"
+      | "decision_maker_accessibility_score"
+      | "expansion_potential_score"
+    >,
+  ) => Promise<void>;
   createLead: (lead: Omit<Lead, "id" | "created_at" | "lifecycle_history">) => Promise<Lead>;
+  updateLeadDetails: (
+    leadId: ID,
+    patch: Partial<
+      Pick<
+        Lead,
+        | "first_name"
+        | "last_name"
+        | "email"
+        | "phone"
+        | "title"
+        | "company_name"
+        | "company_domain"
+        | "region"
+        | "market"
+        | "segment"
+        | "source_detail"
+        | "notes"
+      >
+    >,
+  ) => Promise<void>;
+  createAccount: (
+    account: Omit<Account, "id" | "created_at" | "account_fit_score"> & {
+      account_fit_score?: number;
+    },
+  ) => Promise<Account>;
+  updateAccount: (
+    accountId: ID,
+    patch: Partial<
+      Pick<
+        Account,
+        | "name"
+        | "domain"
+        | "segment"
+        | "region"
+        | "market"
+        | "country"
+        | "city"
+        | "status"
+        | "employee_count"
+        | "locations_count"
+        | "notes"
+      >
+    >,
+  ) => Promise<void>;
+  updateContact: (
+    contactId: ID,
+    patch: Partial<
+      Pick<Contact, "first_name" | "last_name" | "title" | "email" | "phone" | "is_primary">
+    >,
+  ) => Promise<void>;
+  createContact: (contact: Omit<Contact, "id" | "created_at">) => Promise<Contact>;
   convertLead: (input: ConvertLeadInput) => Promise<ConvertLeadResult>;
 
   createOpportunity: (opp: Omit<Opportunity, "id" | "created_at">) => Promise<Opportunity>;
@@ -73,6 +147,12 @@ interface CrmContextValue {
   createTask: (task: Omit<Task, "id" | "created_at">) => Promise<Task>;
   completeTask: (taskId: ID) => void;
   reopenTask: (taskId: ID) => void;
+  rescheduleTask: (taskId: ID, dueDate: string) => void;
+
+  updateUserProfile: (
+    userId: ID,
+    patch: Partial<Pick<User, "role" | "region" | "title" | "active">>,
+  ) => Promise<void>;
 }
 
 const CrmContext = createContext<CrmContextValue | null>(null);
@@ -84,7 +164,11 @@ export function CrmProvider({ children }: { children: ReactNode }) {
   const isAuthenticated = !!session;
 
   // ── Snapshot query ────────────────────────────────────────
-  const { data: liveDb, isLoading, isError } = useQuery({
+  const {
+    data: liveDb,
+    isLoading,
+    isError,
+  } = useQuery({
     queryKey: CRM_QUERY_KEY,
     queryFn: fetchSnapshot,
     enabled: isAuthenticated,
@@ -96,10 +180,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
   const db: CrmDatabase = liveDb ?? SEED_DB;
 
   // Current user from auth profile, falling back to seed user for demo
-  const currentUser: User = useMemo(
-    () => profile ?? (db.users[0] as User),
-    [profile, db.users],
-  );
+  const currentUser: User = useMemo(() => profile ?? (db.users[0] as User), [profile, db.users]);
 
   const invalidate = useCallback(
     () => void qc.invalidateQueries({ queryKey: CRM_QUERY_KEY }),
@@ -113,7 +194,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
 
   // ── Lead mutations ────────────────────────────────────────
   const updateLeadStage = useCallback(
-    (leadId: ID, stage: LeadLifecycleStage, note?: string) => {
+    (leadId: ID, stage: LeadLifecycleStage, note?: string, disqualifyReason?: DisqualifyReason) => {
       // Optimistic: update local cache immediately
       qc.setQueryData<CrmDatabase>(CRM_QUERY_KEY, (old) => {
         if (!old) return old;
@@ -124,19 +205,28 @@ export function CrmProvider({ children }: { children: ReactNode }) {
               ? {
                   ...l,
                   lifecycle_stage: stage,
+                  disqualify_reason: stage === "Disqualified" ? disqualifyReason : null,
                   lifecycle_history: [
                     ...l.lifecycle_history,
-                    { stage, changed_at: new Date().toISOString(), changed_by_user_id: currentUser.id, note },
+                    {
+                      stage,
+                      changed_at: new Date().toISOString(),
+                      changed_by_user_id: currentUser.id,
+                      note,
+                    },
                   ],
                 }
               : l,
           ),
         };
       });
-      dbUpdateLeadStage(leadId, stage, note).catch((e: Error) => {
-        toast.error("Failed to update stage", { description: e.message });
-        invalidate();
-      });
+      dbUpdateLeadStage(leadId, stage, note, disqualifyReason)
+        .then(() => dbCompleteOpenTasksFor({ leadId }))
+        .then(invalidate)
+        .catch((e: Error) => {
+          toast.error("Failed to update stage", { description: e.message });
+          invalidate();
+        });
     },
     [qc, currentUser.id, invalidate],
   );
@@ -145,7 +235,10 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     (leadId: ID, ownerUserId: ID | null) => {
       qc.setQueryData<CrmDatabase>(CRM_QUERY_KEY, (old) => {
         if (!old) return old;
-        return { ...old, leads: old.leads.map((l) => l.id === leadId ? { ...l, owner_user_id: ownerUserId } : l) };
+        return {
+          ...old,
+          leads: old.leads.map((l) => (l.id === leadId ? { ...l, owner_user_id: ownerUserId } : l)),
+        };
       });
       dbAssignLead(leadId, ownerUserId).catch((e: Error) => {
         toast.error("Failed to assign lead", { description: e.message });
@@ -155,9 +248,116 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     [qc, invalidate],
   );
 
+  const updateLeadFitCriteria = useCallback(
+    async (
+      leadId: ID,
+      criteria: Pick<
+        Lead,
+        | "foot_traffic_score"
+        | "utility_readiness_score"
+        | "brand_alignment_score"
+        | "contract_complexity_score"
+        | "decision_maker_accessibility_score"
+        | "expansion_potential_score"
+      >,
+    ) => {
+      await dbUpdateLeadFitCriteria(leadId, criteria);
+      invalidate();
+    },
+    [invalidate],
+  );
+
+  const updateLeadDetails = useCallback(
+    async (
+      leadId: ID,
+      patch: Partial<
+        Pick<
+          Lead,
+          | "first_name"
+          | "last_name"
+          | "email"
+          | "phone"
+          | "title"
+          | "company_name"
+          | "company_domain"
+          | "region"
+          | "market"
+          | "segment"
+          | "source_detail"
+          | "notes"
+        >
+      >,
+    ) => {
+      await dbUpdateLeadDetails(leadId, patch);
+      invalidate();
+    },
+    [invalidate],
+  );
+
+  const updateAccount = useCallback(
+    async (
+      accountId: ID,
+      patch: Partial<
+        Pick<
+          Account,
+          | "name"
+          | "domain"
+          | "segment"
+          | "region"
+          | "market"
+          | "country"
+          | "city"
+          | "status"
+          | "employee_count"
+          | "locations_count"
+          | "notes"
+        >
+      >,
+    ) => {
+      await dbUpdateAccount(accountId, patch);
+      invalidate();
+    },
+    [invalidate],
+  );
+
+  const updateContact = useCallback(
+    async (
+      contactId: ID,
+      patch: Partial<
+        Pick<Contact, "first_name" | "last_name" | "title" | "email" | "phone" | "is_primary">
+      >,
+    ) => {
+      await dbUpdateContact(contactId, patch);
+      invalidate();
+    },
+    [invalidate],
+  );
+
+  const createContact = useCallback(
+    async (contact: Omit<Contact, "id" | "created_at">): Promise<Contact> => {
+      const created = await dbCreateContact(contact);
+      invalidate();
+      return created;
+    },
+    [invalidate],
+  );
+
   const createLead = useCallback(
     async (lead: Omit<Lead, "id" | "created_at" | "lifecycle_history">): Promise<Lead> => {
       const created = await dbCreateLead(lead);
+      invalidate();
+      return created;
+    },
+    [invalidate],
+  );
+
+  const createAccount = useCallback(
+    async (
+      account: Omit<Account, "id" | "created_at" | "account_fit_score"> & {
+        account_fit_score?: number;
+      },
+    ): Promise<Account> => {
+      const created = await dbCreateAccount(account);
       invalidate();
       return created;
     },
@@ -201,10 +401,13 @@ export function CrmProvider({ children }: { children: ReactNode }) {
           ),
         };
       });
-      dbUpdateOpportunityStage(oppId, stage).catch((e: Error) => {
-        toast.error("Failed to update opportunity stage", { description: e.message });
-        invalidate();
-      });
+      dbUpdateOpportunityStage(oppId, stage)
+        .then(() => dbCompleteOpenTasksFor({ opportunityId: oppId }))
+        .then(invalidate)
+        .catch((e: Error) => {
+          toast.error("Failed to update opportunity stage", { description: e.message });
+          invalidate();
+        });
     },
     [qc, invalidate],
   );
@@ -213,6 +416,16 @@ export function CrmProvider({ children }: { children: ReactNode }) {
   const createInteraction = useCallback(
     async (interaction: Omit<Interaction, "id" | "created_at">): Promise<Interaction> => {
       const created = await dbCreateInteraction(interaction);
+      // Logging an interaction against an account/contact/lead/opportunity
+      // is the action itself — auto-complete whatever open follow-up was
+      // sitting on that same record so the rep doesn't have to check it
+      // off by hand too.
+      await dbCompleteOpenTasksFor({
+        leadId: interaction.lead_id ?? undefined,
+        accountId: interaction.account_id ?? undefined,
+        contactId: interaction.contact_id ?? undefined,
+        opportunityId: interaction.opportunity_id ?? undefined,
+      });
       invalidate();
       return created;
     },
@@ -285,6 +498,31 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     [qc, invalidate],
   );
 
+  const rescheduleTask = useCallback(
+    (taskId: ID, dueDate: string) => {
+      qc.setQueryData<CrmDatabase>(CRM_QUERY_KEY, (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          tasks: old.tasks.map((t) => (t.id === taskId ? { ...t, due_date: dueDate } : t)),
+        };
+      });
+      dbRescheduleTask(taskId, dueDate).catch((e: Error) => {
+        toast.error("Failed to reschedule task", { description: e.message });
+        invalidate();
+      });
+    },
+    [qc, invalidate],
+  );
+
+  const updateUserProfile = useCallback(
+    async (userId: ID, patch: Partial<Pick<User, "role" | "region" | "title" | "active">>) => {
+      await dbUpdateProfile(userId, patch);
+      invalidate();
+    },
+    [invalidate],
+  );
+
   const value = useMemo<CrmContextValue>(
     () => ({
       db,
@@ -294,7 +532,13 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       setCurrentUserId,
       updateLeadStage,
       assignLead,
+      updateLeadFitCriteria,
+      updateLeadDetails,
       createLead,
+      createAccount,
+      updateAccount,
+      updateContact,
+      createContact,
       convertLead,
       createOpportunity,
       updateOpportunityStage,
@@ -303,13 +547,34 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       createTask,
       completeTask,
       reopenTask,
+      rescheduleTask,
+      updateUserProfile,
     }),
     [
-      db, currentUser, isLoading, isError, setCurrentUserId,
-      updateLeadStage, assignLead, createLead, convertLead,
-      createOpportunity, updateOpportunityStage,
-      createInteraction, requestAiSummary,
-      createTask, completeTask, reopenTask,
+      db,
+      currentUser,
+      isLoading,
+      isError,
+      setCurrentUserId,
+      updateLeadStage,
+      assignLead,
+      updateLeadFitCriteria,
+      updateLeadDetails,
+      createLead,
+      createAccount,
+      updateAccount,
+      updateContact,
+      createContact,
+      convertLead,
+      createOpportunity,
+      updateOpportunityStage,
+      createInteraction,
+      requestAiSummary,
+      createTask,
+      completeTask,
+      reopenTask,
+      rescheduleTask,
+      updateUserProfile,
     ],
   );
 

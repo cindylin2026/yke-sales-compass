@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { Download, Search } from "lucide-react";
+import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +16,7 @@ import { TypeBadge } from "@/components/crm/badges";
 import { InteractionTimeline } from "@/components/crm/InteractionTimeline";
 import { LogInteractionDialog } from "@/components/crm/LogInteractionDialog";
 import { useCrm } from "@/lib/crm/provider";
+import { downloadCsv } from "@/lib/crm/csv";
 import { userName } from "@/lib/crm/selectors";
 import { INTERACTION_TYPES, type InteractionType } from "@/lib/crm/types";
 
@@ -37,14 +39,11 @@ function InteractionsPage() {
     const q = query.trim().toLowerCase();
     return db.interactions
       .filter((i) => (type === "all" ? true : i.type === type))
-      .filter((i) =>
-        owner === "all" ? true : i.owner_user_id === owner,
-      )
+      .filter((i) => (owner === "all" ? true : i.owner_user_id === owner))
       .filter((i) =>
         !q
           ? true
-          : i.subject.toLowerCase().includes(q) ||
-            (i.notes ?? "").toLowerCase().includes(q),
+          : i.subject.toLowerCase().includes(q) || (i.notes ?? "").toLowerCase().includes(q),
       )
       .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at));
   }, [db.interactions, query, type, owner]);
@@ -70,10 +69,24 @@ function InteractionsPage() {
         title="Interactions"
         description="Every email, call, meeting and demo logged across all accounts and leads."
         actions={
-          <LogInteractionDialog
-            trigger={<Button size="sm">Log interaction</Button>}
-            related={{}}
-          />
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                downloadCsv(`interactions-${new Date().toISOString().slice(0, 10)}.csv`, rows);
+                toast.success(`Exported ${rows.length} interactions`, {
+                  description: "Opens directly in Excel or Google Sheets.",
+                });
+              }}
+            >
+              <Download className="size-3.5" /> Export CSV
+            </Button>
+            <LogInteractionDialog
+              trigger={<Button size="sm">Log interaction</Button>}
+              related={{}}
+            />
+          </div>
         }
       />
 
@@ -89,7 +102,9 @@ function InteractionsPage() {
         <button
           onClick={() => setType("all")}
           className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-            type === "all" ? "border-ember bg-ember/10 text-ember" : "border-border hover:bg-surface-muted"
+            type === "all"
+              ? "border-ember bg-ember/10 text-ember"
+              : "border-border hover:bg-surface-muted"
           }`}
         >
           All ({db.interactions.length})
@@ -99,7 +114,9 @@ function InteractionsPage() {
             key={t}
             onClick={() => setType(t)}
             className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-              type === t ? "border-ember bg-ember/10 text-ember" : "border-border hover:bg-surface-muted"
+              type === t
+                ? "border-ember bg-ember/10 text-ember"
+                : "border-border hover:bg-surface-muted"
             }`}
           >
             {t} ({typeCounts[t] ?? 0})

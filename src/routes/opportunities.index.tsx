@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Search, LayoutGrid, List } from "lucide-react";
+import { Download, Search, LayoutGrid, List } from "lucide-react";
+import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,8 +24,22 @@ import {
   userName,
   weightedAmount,
 } from "@/lib/crm/selectors";
-import { OPPORTUNITY_STAGES, type OpportunityStage, type Region } from "@/lib/crm/types";
+import { downloadCsv } from "@/lib/crm/csv";
+import {
+  OPPORTUNITY_STAGES,
+  REGIONS,
+  type AccountSegment,
+  type OpportunityStage,
+  type Region,
+} from "@/lib/crm/types";
 import { cn } from "@/lib/utils";
+
+const MIN_PROBABILITY_OPTIONS = [
+  { value: "0", label: "Any probability" },
+  { value: "70", label: "70%+" },
+  { value: "50", label: "50%+" },
+  { value: "30", label: "30%+" },
+];
 
 export const Route = createFileRoute("/opportunities/")({
   head: () => ({
@@ -40,8 +55,17 @@ function OpportunitiesPage() {
   const [view, setView] = useState<ViewMode>("kanban");
   const [query, setQuery] = useState("");
   const [region, setRegion] = useState<Region | "all">("all");
+  const [segment, setSegment] = useState<AccountSegment | "all">("all");
+  const [minProbability, setMinProbability] = useState("0");
   const [owner, setOwner] = useState<string>(
     currentUser.role === "sales_rep" ? currentUser.id : "all",
+  );
+
+  const accountsById = useMemo(() => new Map(db.accounts.map((a) => [a.id, a])), [db.accounts]);
+  const segments = useMemo(
+    () =>
+      Array.from(new Set(db.accounts.map((a) => a.segment).filter(Boolean))) as AccountSegment[],
+    [db.accounts],
   );
 
   const filtered = useMemo(() => {
@@ -49,10 +73,18 @@ function OpportunitiesPage() {
     return db.opportunities
       .filter((o) => (region === "all" ? true : o.region === region))
       .filter((o) =>
-        owner === "all" ? true : owner === "unassigned" ? !o.owner_user_id : o.owner_user_id === owner,
+        segment === "all" ? true : accountsById.get(o.account_id)?.segment === segment,
       )
+      .filter((o) =>
+        owner === "all"
+          ? true
+          : owner === "unassigned"
+            ? !o.owner_user_id
+            : o.owner_user_id === owner,
+      )
+      .filter((o) => o.probability >= Number(minProbability))
       .filter((o) => (!q ? true : o.name.toLowerCase().includes(q)));
-  }, [db.opportunities, query, region, owner]);
+  }, [db.opportunities, query, region, segment, minProbability, owner, accountsById]);
 
   const open = openPipeline(filtered);
   const stageData = pipelineByStage(filtered);
@@ -62,7 +94,25 @@ function OpportunitiesPage() {
       <PageHeader
         eyebrow="Revenue pipeline"
         title="Opportunities"
-        description="All deals in the funnel — drag or advance stage from the deal detail page."
+        description="All deals in the funnel — click into a deal to advance its stage."
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                downloadCsv(`opportunities-${new Date().toISOString().slice(0, 10)}.csv`, filtered);
+                toast.success(`Exported ${filtered.length} opportunities`, {
+                  description: "Opens directly in Excel or Google Sheets.",
+                });
+              }}
+            >
+              <Download className="size-4" /> Export CSV
+            </Button>
+            <Button asChild>
+              <Link to="/opportunities/new">New opportunity</Link>
+            </Button>
+          </div>
+        }
       />
 
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -79,9 +129,7 @@ function OpportunitiesPage() {
         />
         <StatCard
           label="Won this period"
-          value={formatCurrency(
-            sumAmount(filtered.filter((o) => o.stage === "Won")),
-          )}
+          value={formatCurrency(sumAmount(filtered.filter((o) => o.stage === "Won")))}
           tone="success"
         />
         <StatCard
@@ -109,8 +157,38 @@ function OpportunitiesPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All regions</SelectItem>
-            <SelectItem value="US">US</SelectItem>
-            <SelectItem value="Asia">Asia</SelectItem>
+            {REGIONS.map((r) => (
+              <SelectItem key={r} value={r}>
+                {r}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {segments.length > 0 && (
+          <Select value={segment} onValueChange={(v) => setSegment(v as AccountSegment | "all")}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Segment" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All segments</SelectItem>
+              {segments.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {s}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        <Select value={minProbability} onValueChange={setMinProbability}>
+          <SelectTrigger className="w-[150px]">
+            <SelectValue placeholder="Probability" />
+          </SelectTrigger>
+          <SelectContent>
+            {MIN_PROBABILITY_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <Select value={owner} onValueChange={setOwner}>
@@ -134,7 +212,9 @@ function OpportunitiesPage() {
             onClick={() => setView("kanban")}
             className={cn(
               "rounded-md p-1.5 transition-colors",
-              view === "kanban" ? "bg-surface-muted text-foreground" : "text-muted-foreground hover:text-foreground",
+              view === "kanban"
+                ? "bg-surface-muted text-foreground"
+                : "text-muted-foreground hover:text-foreground",
             )}
             aria-label="Kanban view"
           >
@@ -144,7 +224,9 @@ function OpportunitiesPage() {
             onClick={() => setView("table")}
             className={cn(
               "rounded-md p-1.5 transition-colors",
-              view === "table" ? "bg-surface-muted text-foreground" : "text-muted-foreground hover:text-foreground",
+              view === "table"
+                ? "bg-surface-muted text-foreground"
+                : "text-muted-foreground hover:text-foreground",
             )}
             aria-label="Table view"
           >
@@ -176,7 +258,7 @@ function OpportunitiesPage() {
                           params={{ opportunityId: o.id }}
                           className="block rounded-xl border border-border bg-surface p-3 transition-colors hover:border-ember/40 hover:bg-surface-muted"
                         >
-                          <p className="text-sm font-medium leading-snug">{o.name}</p>
+                          <p className="text-sm font-medium leading-snug break-words">{o.name}</p>
                           <p className="mt-0.5 text-xs text-muted-foreground">
                             {accountName(db, o.account_id)}
                           </p>
@@ -261,20 +343,20 @@ function OpportunitiesPage() {
                 <tbody className="divide-y divide-border">
                   {filtered.map((o) => (
                     <tr key={o.id} className="transition-colors hover:bg-surface-muted">
-                      <td className="px-4 py-2.5">
+                      <td className="max-w-[220px] px-4 py-2.5">
                         <Link
                           to="/opportunities/$opportunityId"
                           params={{ opportunityId: o.id }}
-                          className="font-medium hover:text-ember hover:underline"
+                          className="block truncate font-medium hover:text-ember hover:underline"
                         >
                           {o.name}
                         </Link>
                       </td>
-                      <td className="px-4 py-2.5 text-muted-foreground">
+                      <td className="max-w-[180px] px-4 py-2.5 text-muted-foreground">
                         <Link
                           to="/accounts/$accountId"
                           params={{ accountId: o.account_id }}
-                          className="hover:text-ember hover:underline"
+                          className="block truncate hover:text-ember hover:underline"
                         >
                           {accountName(db, o.account_id)}
                         </Link>

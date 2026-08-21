@@ -13,6 +13,7 @@ import type {
   ConvertLeadInput,
   ConvertLeadResult,
   CrmDatabase,
+  DisqualifyReason,
   ID,
   Interaction,
   Lead,
@@ -42,6 +43,7 @@ function mapProfile(r: DbProfile): User {
     region: r.region,
     title: r.title ?? "",
     avatar_initials: r.avatar_initials ?? r.full_name.slice(0, 2).toUpperCase(),
+    active: r.active,
   };
 }
 
@@ -50,8 +52,9 @@ function mapAccount(r: DbAccount): Account {
     id: r.id,
     name: r.name,
     domain: r.domain ?? undefined,
-    segment: (r.segment as Account["segment"]) ?? "Hotel",
-    region: (r.region as Account["region"]) ?? "US",
+    segment: (r.segment as Account["segment"]) ?? "Unknown",
+    region: (r.region as Account["region"]) ?? "Unknown",
+    market: r.market ?? undefined,
     country: r.country ?? "",
     city: r.city ?? undefined,
     status: r.status as Account["status"],
@@ -60,6 +63,14 @@ function mapAccount(r: DbAccount): Account {
     locations_count: r.locations_count ?? undefined,
     owner_user_id: r.owner_id,
     notes: r.notes ?? undefined,
+    foot_traffic_score: r.foot_traffic_score ?? undefined,
+    utility_readiness_score: r.utility_readiness_score ?? undefined,
+    brand_alignment_score: r.brand_alignment_score ?? undefined,
+    contract_complexity_score: r.contract_complexity_score ?? undefined,
+    decision_maker_accessibility_score: r.decision_maker_accessibility_score ?? undefined,
+    expansion_potential_score: r.expansion_potential_score ?? undefined,
+    operating_hours_per_day: r.operating_hours_per_day ?? undefined,
+    operating_days_per_year: r.operating_days_per_year ?? undefined,
     created_at: r.created_at,
   };
 }
@@ -91,6 +102,8 @@ function mapLead(r: DbLead): Lead {
     company_name: r.company_name,
     company_domain: r.company_domain ?? undefined,
     region: r.region,
+    market: r.market ?? undefined,
+    segment: (r.segment as Lead["segment"]) ?? undefined,
     source: r.source as Lead["source"],
     source_detail: r.source_detail ?? undefined,
     campaign_id: r.campaign_id ?? undefined,
@@ -99,13 +112,20 @@ function mapLead(r: DbLead): Lead {
     owner_user_id: r.owner_id,
     notes: r.notes ?? undefined,
     last_contacted_at: r.last_contacted_at ?? undefined,
-    next_action: r.next_action ?? undefined,
     created_at: r.created_at,
     lifecycle_history: [], // loaded separately when needed
     converted_at: r.converted_at ?? undefined,
     converted_account_id: r.converted_account_id ?? undefined,
     converted_contact_id: r.converted_contact_id ?? undefined,
     converted_opportunity_id: r.converted_opportunity_id ?? undefined,
+    disqualify_reason: (r.disqualify_reason as Lead["disqualify_reason"]) ?? undefined,
+    foot_traffic_score: r.foot_traffic_score ?? undefined,
+    utility_readiness_score: r.utility_readiness_score ?? undefined,
+    brand_alignment_score: r.brand_alignment_score ?? undefined,
+    contract_complexity_score: r.contract_complexity_score ?? undefined,
+    decision_maker_accessibility_score: r.decision_maker_accessibility_score ?? undefined,
+    expansion_potential_score: r.expansion_potential_score ?? undefined,
+    site_fit_score: r.site_fit_score ?? undefined,
   };
 }
 
@@ -118,10 +138,18 @@ function mapOpportunity(r: DbOpportunity): Opportunity {
     owner_user_id: r.owner_id,
     stage: r.stage as Opportunity["stage"],
     amount: r.amount,
+    boba_machine_qty: r.boba_machine_qty,
+    ramen_machine_qty: r.ramen_machine_qty,
+    avg_daily_boba_units_low: r.avg_daily_boba_units_low,
+    avg_daily_boba_units_high: r.avg_daily_boba_units_high,
+    avg_daily_ramen_units_low: r.avg_daily_ramen_units_low,
+    avg_daily_ramen_units_high: r.avg_daily_ramen_units_high,
+    amount_low: r.amount_low,
+    amount_high: r.amount_high,
     probability: r.probability,
     expected_close_date: r.expected_close_date ?? "",
     next_action: r.next_action ?? undefined,
-    region: (r.region as Opportunity["region"]) ?? "US",
+    region: (r.region as Opportunity["region"]) ?? "Unknown",
     originating_lead_id: r.originating_lead_id ?? undefined,
     created_at: r.created_at,
     closed_at: r.closed_at ?? undefined,
@@ -199,7 +227,7 @@ async function fetchAll<T>(
     if (error) throw new Error(error.message);
     const page = (data ?? []).map(mapper as (r: unknown) => T);
     results.push(...page);
-    if (page.length < PAGE) break;   // last page
+    if (page.length < PAGE) break; // last page
     from += PAGE;
   }
 
@@ -222,7 +250,13 @@ export async function fetchSnapshot(): Promise<CrmDatabase> {
     ]);
 
   // Attach stage history to leads
-  const allHistory: { lead_id: string; new_stage: string; changed_at: string; changed_by: string | null; note: string | null }[] = [];
+  const allHistory: {
+    lead_id: string;
+    new_stage: string;
+    changed_at: string;
+    changed_by: string | null;
+    note: string | null;
+  }[] = [];
   let hFrom = 0;
   while (true) {
     const { data: page } = await supabase
@@ -260,16 +294,42 @@ export async function dbUpdateLeadStage(
   leadId: ID,
   stage: LeadLifecycleStage,
   note?: string,
+  disqualifyReason?: DisqualifyReason,
+): Promise<void> {
+  const { error } = await supabase.rpc("update_lead_stage", {
+    p_lead_id: leadId,
+    p_new_stage: stage,
+    p_note: note ?? null,
+    p_disqualify_reason: disqualifyReason ?? null,
+  });
+  if (error) throw new Error(error.message);
+}
+
+export async function dbUpdateLeadFitCriteria(
+  leadId: ID,
+  criteria: Pick<
+    Lead,
+    | "foot_traffic_score"
+    | "utility_readiness_score"
+    | "brand_alignment_score"
+    | "contract_complexity_score"
+    | "decision_maker_accessibility_score"
+    | "expansion_potential_score"
+  >,
 ): Promise<void> {
   const { error } = await supabase
     .from("leads")
-    .update({ lifecycle_stage: stage, updated_at: new Date().toISOString() })
+    .update({
+      foot_traffic_score: criteria.foot_traffic_score ?? null,
+      utility_readiness_score: criteria.utility_readiness_score ?? null,
+      brand_alignment_score: criteria.brand_alignment_score ?? null,
+      contract_complexity_score: criteria.contract_complexity_score ?? null,
+      decision_maker_accessibility_score: criteria.decision_maker_accessibility_score ?? null,
+      expansion_potential_score: criteria.expansion_potential_score ?? null,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", leadId);
   if (error) throw new Error(error.message);
-
-  if (note) {
-    await supabase.from("lead_stage_history").insert({ lead_id: leadId, new_stage: stage, note });
-  }
 }
 
 export async function dbAssignLead(leadId: ID, ownerUserId: ID | null): Promise<void> {
@@ -278,6 +338,187 @@ export async function dbAssignLead(leadId: ID, ownerUserId: ID | null): Promise<
     .update({ owner_id: ownerUserId, updated_at: new Date().toISOString() })
     .eq("id", leadId);
   if (error) throw new Error(error.message);
+}
+
+export async function dbUpdateProfile(
+  userId: ID,
+  patch: Partial<Pick<User, "role" | "region" | "title" | "active">>,
+): Promise<void> {
+  const { error } = await supabase
+    .from("profiles")
+    .update({
+      ...(patch.role !== undefined ? { role: patch.role } : {}),
+      ...(patch.region !== undefined ? { region: patch.region } : {}),
+      ...(patch.title !== undefined ? { title: patch.title } : {}),
+      ...(patch.active !== undefined ? { active: patch.active } : {}),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", userId);
+  if (error) throw new Error(error.message);
+}
+
+export async function dbUpdateAccount(
+  accountId: ID,
+  patch: Partial<
+    Pick<
+      Account,
+      | "name"
+      | "domain"
+      | "segment"
+      | "region"
+      | "market"
+      | "country"
+      | "city"
+      | "status"
+      | "employee_count"
+      | "locations_count"
+      | "notes"
+    >
+  >,
+): Promise<void> {
+  const { error } = await supabase
+    .from("accounts")
+    .update({
+      ...(patch.name !== undefined ? { name: patch.name } : {}),
+      ...(patch.domain !== undefined ? { domain: patch.domain || null } : {}),
+      ...(patch.segment !== undefined ? { segment: patch.segment } : {}),
+      ...(patch.region !== undefined ? { region: patch.region } : {}),
+      ...(patch.market !== undefined ? { market: patch.market || null } : {}),
+      ...(patch.country !== undefined ? { country: patch.country } : {}),
+      ...(patch.city !== undefined ? { city: patch.city || null } : {}),
+      ...(patch.status !== undefined ? { status: patch.status } : {}),
+      ...(patch.employee_count !== undefined
+        ? { employee_count: patch.employee_count ?? null }
+        : {}),
+      ...(patch.locations_count !== undefined
+        ? { locations_count: patch.locations_count ?? null }
+        : {}),
+      ...(patch.notes !== undefined ? { notes: patch.notes || null } : {}),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", accountId);
+  if (error) throw new Error(error.message);
+}
+
+export async function dbUpdateLeadDetails(
+  leadId: ID,
+  patch: Partial<
+    Pick<
+      Lead,
+      | "first_name"
+      | "last_name"
+      | "email"
+      | "phone"
+      | "title"
+      | "company_name"
+      | "company_domain"
+      | "region"
+      | "market"
+      | "segment"
+      | "source_detail"
+      | "notes"
+    >
+  >,
+): Promise<void> {
+  const { error } = await supabase
+    .from("leads")
+    .update({
+      ...(patch.first_name !== undefined ? { first_name: patch.first_name } : {}),
+      ...(patch.last_name !== undefined ? { last_name: patch.last_name } : {}),
+      ...(patch.email !== undefined ? { email: patch.email } : {}),
+      ...(patch.phone !== undefined ? { phone: patch.phone || null } : {}),
+      ...(patch.title !== undefined ? { title: patch.title || null } : {}),
+      ...(patch.company_name !== undefined ? { company_name: patch.company_name } : {}),
+      ...(patch.company_domain !== undefined
+        ? { company_domain: patch.company_domain || null }
+        : {}),
+      ...(patch.region !== undefined ? { region: patch.region } : {}),
+      ...(patch.market !== undefined ? { market: patch.market || null } : {}),
+      ...(patch.segment !== undefined ? { segment: patch.segment } : {}),
+      ...(patch.source_detail !== undefined ? { source_detail: patch.source_detail || null } : {}),
+      ...(patch.notes !== undefined ? { notes: patch.notes || null } : {}),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", leadId);
+  if (error) throw new Error(error.message);
+}
+
+export async function dbUpdateContact(
+  contactId: ID,
+  patch: Partial<
+    Pick<Contact, "first_name" | "last_name" | "title" | "email" | "phone" | "is_primary">
+  >,
+): Promise<void> {
+  const { error } = await supabase
+    .from("contacts")
+    .update({
+      ...(patch.first_name !== undefined ? { first_name: patch.first_name } : {}),
+      ...(patch.last_name !== undefined ? { last_name: patch.last_name } : {}),
+      ...(patch.title !== undefined ? { title: patch.title || null } : {}),
+      ...(patch.email !== undefined ? { email: patch.email } : {}),
+      ...(patch.phone !== undefined ? { phone: patch.phone || null } : {}),
+      ...(patch.is_primary !== undefined ? { is_primary: patch.is_primary } : {}),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", contactId);
+  if (error) throw new Error(error.message);
+}
+
+export async function dbCreateContact(
+  contact: Omit<Contact, "id" | "created_at">,
+): Promise<Contact> {
+  const { data, error } = await supabase
+    .from("contacts")
+    .insert({
+      organization_id: await getOrgId(),
+      account_id: contact.account_id,
+      first_name: contact.first_name,
+      last_name: contact.last_name,
+      title: contact.title || null,
+      email: contact.email || null,
+      phone: contact.phone || null,
+      is_primary: contact.is_primary,
+      owner_id: contact.owner_user_id,
+      originating_lead_id: contact.originating_lead_id || null,
+    })
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return mapContact(data as DbContact);
+}
+
+export async function dbCreateAccount(
+  account: Omit<Account, "id" | "created_at" | "account_fit_score"> & {
+    account_fit_score?: number;
+  },
+): Promise<Account> {
+  const { data, error } = await supabase
+    .from("accounts")
+    .insert({
+      organization_id: await getOrgId(),
+      name: account.name,
+      domain: account.domain || null,
+      segment: account.segment,
+      region: account.region,
+      country: account.country,
+      city: account.city || null,
+      status: account.status,
+      account_fit_score: account.account_fit_score ?? 50,
+      employee_count: account.employee_count ?? null,
+      locations_count: account.locations_count ?? null,
+      owner_id: account.owner_user_id || null,
+      notes: account.notes || null,
+      foot_traffic_score: account.foot_traffic_score ?? null,
+      utility_readiness_score: account.utility_readiness_score ?? null,
+      brand_alignment_score: account.brand_alignment_score ?? null,
+      contract_complexity_score: account.contract_complexity_score ?? null,
+      decision_maker_accessibility_score: account.decision_maker_accessibility_score ?? null,
+      expansion_potential_score: account.expansion_potential_score ?? null,
+    })
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return mapAccount(data as DbAccount);
 }
 
 export async function dbCreateLead(
@@ -295,6 +536,7 @@ export async function dbCreateLead(
       company_name: lead.company_name,
       company_domain: lead.company_domain || null,
       region: lead.region,
+      segment: lead.segment ?? "Unknown",
       source: lead.source,
       source_detail: lead.source_detail || null,
       campaign_id: lead.campaign_id || null,
@@ -347,7 +589,15 @@ export async function dbCreateOpportunity(
       primary_contact_id: opp.primary_contact_id,
       owner_id: opp.owner_user_id || null,
       stage: opp.stage,
-      amount: opp.amount,
+      amount: 0, // overwritten by the compute_opportunity_amount trigger
+      amount_low: 0, // overwritten by the compute_opportunity_amount trigger
+      amount_high: 0, // overwritten by the compute_opportunity_amount trigger
+      boba_machine_qty: opp.boba_machine_qty,
+      ramen_machine_qty: opp.ramen_machine_qty,
+      avg_daily_boba_units_low: opp.avg_daily_boba_units_low ?? 50,
+      avg_daily_boba_units_high: opp.avg_daily_boba_units_high ?? 100,
+      avg_daily_ramen_units_low: opp.avg_daily_ramen_units_low ?? 30,
+      avg_daily_ramen_units_high: opp.avg_daily_ramen_units_high ?? 75,
       probability: opp.probability,
       expected_close_date: opp.expected_close_date || null,
       next_action: opp.next_action || null,
@@ -445,10 +695,54 @@ export async function dbCompleteTask(taskId: ID): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Auto-completes open follow-up tasks tied to a lead/account/contact/
+ * opportunity — called whenever an action supersedes them (stage change,
+ * a new interaction logged) so reps don't have to manually check off a
+ * task that the action itself already fulfilled.
+ */
+export async function dbCompleteOpenTasksFor(filter: {
+  leadId?: ID | undefined;
+  accountId?: ID | undefined;
+  contactId?: ID | undefined;
+  opportunityId?: ID | undefined;
+}): Promise<void> {
+  const ids = [filter.leadId, filter.accountId, filter.contactId, filter.opportunityId].filter(
+    Boolean,
+  );
+  if (ids.length === 0) return;
+
+  let query = supabase.from("tasks").update({
+    status: "Completed",
+    completed_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
+  // Only touch tasks that are still Open — never resurrect a task someone
+  // already cancelled.
+  query = query.eq("status", "Open");
+
+  const orParts: string[] = [];
+  if (filter.leadId) orParts.push(`lead_id.eq.${filter.leadId}`);
+  if (filter.accountId) orParts.push(`account_id.eq.${filter.accountId}`);
+  if (filter.contactId) orParts.push(`contact_id.eq.${filter.contactId}`);
+  if (filter.opportunityId) orParts.push(`opportunity_id.eq.${filter.opportunityId}`);
+
+  const { error } = await query.or(orParts.join(","));
+  if (error) throw new Error(error.message);
+}
+
 export async function dbReopenTask(taskId: ID): Promise<void> {
   const { error } = await supabase
     .from("tasks")
     .update({ status: "Open", completed_at: null })
+    .eq("id", taskId);
+  if (error) throw new Error(error.message);
+}
+
+export async function dbRescheduleTask(taskId: ID, dueDate: string): Promise<void> {
+  const { error } = await supabase
+    .from("tasks")
+    .update({ due_date: dueDate, updated_at: new Date().toISOString() })
     .eq("id", taskId);
   if (error) throw new Error(error.message);
 }
@@ -477,53 +771,6 @@ export async function findDuplicateContacts(email: string): Promise<Contact[]> {
 export async function findDuplicateLeads(email: string): Promise<Lead[]> {
   const { data } = await supabase.from("leads").select("*").ilike("email", email).limit(5);
   return (data ?? []).map(mapLead as (r: unknown) => Lead);
-}
-
-// ── Generic row editor (spreadsheet-style data grid) ────────────
-// Operates on raw DB columns rather than the mapped app types above —
-// used only by the admin "Data Editor" page, which is meant to expose
-// the real table shape directly (like editing the sheet used to be).
-
-export type EditableTable =
-  "accounts" | "contacts" | "leads" | "opportunities" | "tasks" | "campaigns";
-
-export async function dbListRows(table: EditableTable): Promise<Record<string, unknown>[]> {
-  const { data, error } = await supabase
-    .from(table)
-    .select("*")
-    .order("created_at", { ascending: false });
-  if (error) throw new Error(error.message);
-  return (data ?? []) as Record<string, unknown>[];
-}
-
-export async function dbUpdateRow(
-  table: EditableTable,
-  id: ID,
-  patch: Record<string, unknown>,
-): Promise<void> {
-  // Dynamic table names defeat supabase-js's per-table generated types.
-  const { error } = await (supabase.from(table) as ReturnType<typeof supabase.from>)
-    .update({ ...patch, updated_at: new Date().toISOString() })
-    .eq("id", id);
-  if (error) throw new Error(error.message);
-}
-
-export async function dbInsertRow(
-  table: EditableTable,
-  row: Record<string, unknown>,
-): Promise<Record<string, unknown>> {
-  const orgId = await getOrgId();
-  const { data, error } = await (supabase.from(table) as ReturnType<typeof supabase.from>)
-    .insert({ ...row, organization_id: orgId })
-    .select()
-    .single();
-  if (error) throw new Error(error.message);
-  return data as Record<string, unknown>;
-}
-
-export async function dbDeleteRow(table: EditableTable, id: ID): Promise<void> {
-  const { error } = await supabase.from(table).delete().eq("id", id);
-  if (error) throw new Error(error.message);
 }
 
 // ── Helpers ───────────────────────────────────────────────────

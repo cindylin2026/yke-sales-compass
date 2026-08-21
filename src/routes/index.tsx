@@ -1,5 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { AlertTriangle, ArrowRight, CalendarClock, Flame, Sparkles, Target } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  BarChart3,
+  CalendarClock,
+  Flame,
+  LineChart,
+  Sparkles,
+  Target,
+  Users,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader, Panel, StatCard, EmptyState } from "@/components/crm/ui-bits";
 import { TaskList } from "@/components/crm/TaskList";
@@ -8,8 +18,10 @@ import { FitScore, LeadScore, LifecycleBadge, StageBadge } from "@/components/cr
 import { useCrm } from "@/lib/crm/provider";
 import {
   bucketTasks,
+  exceptions,
   formatCurrency,
   formatShortDate,
+  funnelCounts,
   leadName,
   openPipeline,
   relativeDay,
@@ -39,17 +51,28 @@ export const Route = createFileRoute("/")({
 });
 
 function SalesHome() {
+  const { currentUser } = useCrm();
+  return currentUser.role === "sales_rep" ? <SalesRepHome /> : <ManagerHome />;
+}
+
+function SalesRepHome() {
   const { db, currentUser } = useCrm();
 
   const myTasks = scopeForUser(db.tasks, currentUser);
   const buckets = bucketTasks(myTasks);
   const myLeads = scopeForUser(db.leads, currentUser);
+  const myAccounts = scopeForUser(db.accounts, currentUser);
   const myOpps = scopeForUser(db.opportunities, currentUser);
   const open = openPipeline(myOpps);
 
   const newLeads = myLeads.filter((l) => l.lifecycle_stage === "New");
   const highPriority = myLeads
-    .filter((l) => l.lifecycle_stage !== "Converted" && l.lifecycle_stage !== "Disqualified" && l.lead_score >= 70)
+    .filter(
+      (l) =>
+        l.lifecycle_stage !== "Converted" &&
+        l.lifecycle_stage !== "Disqualified" &&
+        l.lead_score >= 70,
+    )
     .sort((a, b) => b.lead_score - a.lead_score);
   const unassigned = db.leads.filter((l) => !l.owner_user_id && l.lifecycle_stage === "New");
 
@@ -129,7 +152,10 @@ function SalesHome() {
               </Button>
             }
           >
-            <TaskList tasks={buckets.overdue.slice(0, 6)} emptyLabel="Nothing overdue. Strong work." />
+            <TaskList
+              tasks={buckets.overdue.slice(0, 6)}
+              emptyLabel="Nothing overdue. Strong work."
+            />
           </Panel>
 
           <Panel title="Due today" bodyClassName="p-4 pt-1">
@@ -175,7 +201,9 @@ function SalesHome() {
                         </div>
                         <StageBadge stage={o.stage} />
                         <div className="w-20 text-right">
-                          <p className="font-display text-sm font-semibold">{formatCurrency(o.amount)}</p>
+                          <p className="font-display text-sm font-semibold">
+                            {formatCurrency(o.amount)}
+                          </p>
                           <p className="text-[11px] text-muted-foreground">
                             {formatShortDate(o.expected_close_date)}
                           </p>
@@ -186,7 +214,9 @@ function SalesHome() {
               </ul>
             ) : (
               <div className="p-4">
-                <EmptyState>No open opportunities yet — convert a qualified lead to start one.</EmptyState>
+                <EmptyState>
+                  No open opportunities yet — convert a qualified lead to start one.
+                </EmptyState>
               </div>
             )}
           </Panel>
@@ -281,29 +311,46 @@ function SalesHome() {
             </Panel>
           ) : null}
 
-          <Panel title="Top target accounts" description="By Account Fit Score" bodyClassName="p-0">
-            <ul className="divide-y divide-border">
-              {[...db.accounts]
-                .sort((a, b) => b.account_fit_score - a.account_fit_score)
-                .slice(0, 5)
-                .map((a) => (
-                  <li key={a.id}>
-                    <Link
-                      to="/accounts/$accountId"
-                      params={{ accountId: a.id }}
-                      className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-surface-muted"
-                    >
-                      <FitScore value={a.account_fit_score} size="sm" />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{a.name}</p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {a.segment} · {a.region}
-                        </p>
-                      </div>
-                    </Link>
-                  </li>
-                ))}
-            </ul>
+          <Panel
+            title="My accounts"
+            description="By Account Fit Score"
+            bodyClassName="p-0"
+            actions={
+              <Button asChild size="sm" variant="ghost">
+                <Link to="/accounts">
+                  All accounts <ArrowRight className="size-3.5" />
+                </Link>
+              </Button>
+            }
+          >
+            {myAccounts.length ? (
+              <ul className="divide-y divide-border">
+                {[...myAccounts]
+                  .sort((a, b) => b.account_fit_score - a.account_fit_score)
+                  .slice(0, 5)
+                  .map((a) => (
+                    <li key={a.id}>
+                      <Link
+                        to="/accounts/$accountId"
+                        params={{ accountId: a.id }}
+                        className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-surface-muted"
+                      >
+                        <FitScore value={a.account_fit_score} size="sm" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">{a.name}</p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {a.segment} · {a.region}
+                          </p>
+                        </div>
+                      </Link>
+                    </li>
+                  ))}
+              </ul>
+            ) : (
+              <div className="p-4">
+                <EmptyState>No accounts assigned to you yet.</EmptyState>
+              </div>
+            )}
           </Panel>
 
           <Panel
@@ -317,6 +364,158 @@ function SalesHome() {
             />
           </Panel>
         </div>
+      </div>
+    </>
+  );
+}
+
+interface QuickLink {
+  to: string;
+  label: string;
+  value: string;
+  hint: string;
+  icon: typeof Target;
+}
+
+function ManagerHome() {
+  const { db, currentUser } = useCrm();
+
+  const open = openPipeline(db.opportunities);
+  const funnel = funnelCounts(db, db.leads);
+  const exc = exceptions(db, db.opportunities, db.tasks, db.leads);
+  const repCount = db.users.filter((u) => u.role === "sales_rep" && u.active).length;
+  const wonRevenue = sumAmount(db.opportunities.filter((o) => o.stage === "Won"));
+
+  const hour = new Date().getUTCHours();
+  const greeting = hour < 11 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+
+  const quickLinks: QuickLink[] = [
+    {
+      to: "/leads",
+      label: "All Leads",
+      value: String(db.leads.length),
+      hint: `${funnel.sql} in SQL`,
+      icon: Target,
+    },
+    {
+      to: "/opportunities",
+      label: "All Pipeline",
+      value: formatCurrency(sumAmount(open)),
+      hint: `${open.length} open deals`,
+      icon: BarChart3,
+    },
+    {
+      to: "/dashboard",
+      label: "Team Performance",
+      value: String(repCount),
+      hint: "active reps",
+      icon: Users,
+    },
+    {
+      to: "/dashboard",
+      label: "Reports",
+      value: "Charts",
+      hint: "Funnel, pipeline & revenue",
+      icon: LineChart,
+    },
+  ];
+
+  return (
+    <>
+      <PageHeader
+        eyebrow={`${currentUser.region} · ${currentUser.role.replace("_", " ")}`}
+        title={`${greeting}, ${currentUser.full_name.split(" ")[0]}`}
+        description="Org-wide snapshot — jump into any view below."
+        actions={
+          <Button asChild>
+            <Link to="/dashboard">
+              Open full dashboard <ArrowRight className="size-4" />
+            </Link>
+          </Button>
+        }
+      />
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {quickLinks.map((q) => (
+          <Link
+            key={q.label}
+            to={q.to}
+            className="panel flex flex-col gap-2 p-4 transition-colors hover:border-ring/40"
+          >
+            <q.icon className="size-4 text-muted-foreground" />
+            <div>
+              <p className="metric-value">{q.value}</p>
+              <p className="text-xs font-medium">{q.label}</p>
+              <p className="text-[11px] text-muted-foreground">{q.hint}</p>
+            </div>
+          </Link>
+        ))}
+      </div>
+
+      <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-5">
+        <StatCard label="Total pipeline" value={formatCurrency(sumAmount(open))} tone="success" />
+        <StatCard label="Won revenue" value={formatCurrency(wonRevenue)} tone="success" />
+        <StatCard label="Open opps" value={open.length} />
+        <StatCard label="MQL" value={funnel.mql} />
+        <StatCard label="SQL" value={funnel.sql} tone="brand" />
+      </div>
+
+      <div className="mt-6 grid gap-5 lg:grid-cols-2">
+        <Panel
+          title="SLA breached leads"
+          description="No contact in 48h+"
+          bodyClassName="p-0"
+          className={exc.slaBreachedLeads.length ? "ring-1 ring-warning/30" : ""}
+        >
+          {exc.slaBreachedLeads.length ? (
+            <ul className="divide-y divide-border">
+              {exc.slaBreachedLeads.slice(0, 6).map((l) => (
+                <li key={l.id}>
+                  <Link
+                    to="/leads/$leadId"
+                    params={{ leadId: l.id }}
+                    className="flex items-center justify-between gap-2 px-4 py-2.5 text-sm transition-colors hover:bg-surface-muted"
+                  >
+                    <span className="min-w-0 truncate font-medium">{leadName(l)}</span>
+                    <LifecycleBadge stage={l.lifecycle_stage} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="p-4">
+              <EmptyState>Nothing overdue for contact.</EmptyState>
+            </div>
+          )}
+        </Panel>
+
+        <Panel
+          title="Unassigned leads"
+          description="No owner yet"
+          bodyClassName="p-0"
+          className={exc.unassignedLeads.length ? "ring-1 ring-destructive/20" : ""}
+        >
+          {exc.unassignedLeads.length ? (
+            <ul className="divide-y divide-border">
+              {exc.unassignedLeads.slice(0, 6).map((l) => (
+                <li key={l.id}>
+                  <Link
+                    to="/leads/$leadId"
+                    params={{ leadId: l.id }}
+                    className="flex items-center justify-between gap-2 px-4 py-2.5 text-sm transition-colors hover:bg-surface-muted"
+                  >
+                    <span className="min-w-0 truncate font-medium">{leadName(l)}</span>
+                    <span className="text-xs text-muted-foreground">{l.region}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="p-4">
+              <EmptyState>Every lead has an owner.</EmptyState>
+            </div>
+          )}
+        </Panel>
       </div>
     </>
   );

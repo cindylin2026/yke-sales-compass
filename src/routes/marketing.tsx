@@ -13,8 +13,12 @@ import {
   LabelList,
   Cell,
 } from "recharts";
+import { Download } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { PageHeader, Panel, StatCard, DetailRow, EmptyState } from "@/components/crm/ui-bits";
 import { useCrm } from "@/lib/crm/provider";
+import { downloadCsv } from "@/lib/crm/csv";
 import {
   formatCurrency,
   formatDate,
@@ -22,7 +26,7 @@ import {
   leadSourcePerformance,
   scopeForUser,
 } from "@/lib/crm/selectors";
-import type { Region } from "@/lib/crm/types";
+import { REGIONS, type Region } from "@/lib/crm/types";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/marketing")({
@@ -74,9 +78,7 @@ function MarketingPage() {
       const campaignLeads = leads.filter((l) => l.campaign_id === c.id);
       const converted = campaignLeads.filter((l) => l.lifecycle_stage === "Converted").length;
       const wonOpps = db.opportunities.filter(
-        (o) =>
-          o.stage === "Won" &&
-          campaignLeads.some((l) => l.converted_opportunity_id === o.id),
+        (o) => o.stage === "Won" && campaignLeads.some((l) => l.converted_opportunity_id === o.id),
       );
       const wonRevenue = wonOpps.reduce((a, o) => a + o.amount, 0);
       const roi = c.budget && c.budget > 0 ? ((wonRevenue - c.budget) / c.budget) * 100 : null;
@@ -101,9 +103,11 @@ function MarketingPage() {
     converted: s.converted,
   }));
 
-  // Conversion rate bar
+  // Conversion rate bar — Outbound leads skip the MQL/SAL/SQL funnel
+  // entirely (they go straight to a directly-created Account), so an
+  // "MQL rate" for them isn't a meaningful comparison.
   const convRateData = sourcePerf
-    .filter((s) => s.volume >= 2)
+    .filter((s) => s.volume >= 2 && s.source !== "Outbound")
     .map((s) => ({
       name: s.source.length > 18 ? s.source.slice(0, 16) + "…" : s.source,
       rate: Math.round(s.mqlRate * 100),
@@ -116,11 +120,24 @@ function MarketingPage() {
         eyebrow="Marketing intelligence"
         title="Marketing Funnel"
         description="Lead-to-revenue funnel, source performance and campaign ROI in one view."
+        actions={
+          <Button
+            variant="outline"
+            onClick={() => {
+              downloadCsv(`campaigns-${new Date().toISOString().slice(0, 10)}.csv`, campaigns);
+              toast.success(`Exported ${campaigns.length} campaigns`, {
+                description: "Opens directly in Excel or Google Sheets.",
+              });
+            }}
+          >
+            <Download className="size-4" /> Export CSV
+          </Button>
+        }
       />
 
       {/* Region toggle */}
       <div className="mb-5 flex gap-2">
-        {(["all", "US", "Asia"] as const).map((r) => (
+        {(["all", ...REGIONS] as const).map((r) => (
           <button
             key={r}
             onClick={() => setRegion(r)}
@@ -145,16 +162,8 @@ function MarketingPage() {
           hint={`${pct(funnel.mql, funnel.total)} of leads`}
           tone="brand"
         />
-        <StatCard
-          label="SAL"
-          value={funnel.sal}
-          hint={`${pct(funnel.sal, funnel.mql)} of MQL`}
-        />
-        <StatCard
-          label="SQL"
-          value={funnel.sql}
-          hint={`${pct(funnel.sql, funnel.sal)} of SAL`}
-        />
+        <StatCard label="SAL" value={funnel.sal} hint={`${pct(funnel.sal, funnel.mql)} of MQL`} />
+        <StatCard label="SQL" value={funnel.sql} hint={`${pct(funnel.sql, funnel.sal)} of SAL`} />
         <StatCard
           label="Converted"
           value={funnel.converted}
@@ -173,10 +182,7 @@ function MarketingPage() {
         {/* Left 2 cols */}
         <div className="space-y-5 xl:col-span-2">
           {/* Source volume bar */}
-          <Panel
-            title="Lead volume by source"
-            description="How many leads each channel generates"
-          >
+          <Panel title="Lead volume by source" description="How many leads each channel generates">
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={sourceBarData} margin={{ top: 4, right: 8, bottom: 40, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
@@ -204,7 +210,12 @@ function MarketingPage() {
                 />
                 <Bar dataKey="leads" name="Leads" fill="var(--info)" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="mql" name="MQL" fill="var(--ember)" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="converted" name="Converted" fill="var(--success)" radius={[4, 4, 0, 0]} />
+                <Bar
+                  dataKey="converted"
+                  name="Converted"
+                  fill="var(--success)"
+                  radius={[4, 4, 0, 0]}
+                />
               </BarChart>
             </ResponsiveContainer>
           </Panel>
@@ -212,7 +223,7 @@ function MarketingPage() {
           {/* MQL conversion rate by source */}
           <Panel
             title="MQL rate by source"
-            description="% of leads that reach MQL — higher is better"
+            description="% of leads that reach MQL — higher is better. Excludes Outbound, which skips the lead funnel entirely."
           >
             <ResponsiveContainer width="100%" height={220}>
               <BarChart
@@ -263,7 +274,10 @@ function MarketingPage() {
           </Panel>
 
           {/* Campaign ROI table */}
-          <Panel title="Campaign performance" description="Lead volume, conversion and ROI per campaign">
+          <Panel
+            title="Campaign performance"
+            description="Lead volume, conversion and ROI per campaign"
+          >
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-xs text-muted-foreground">
@@ -327,7 +341,9 @@ function MarketingPage() {
                     : 0;
                 const dropFromPrev =
                   idx > 0 && funnelChartData[idx - 1]!.value > 0
-                    ? ((funnelChartData[idx - 1]!.value - stage.value) / funnelChartData[idx - 1]!.value) * 100
+                    ? ((funnelChartData[idx - 1]!.value - stage.value) /
+                        funnelChartData[idx - 1]!.value) *
+                      100
                     : 0;
                 return (
                   <div key={stage.name}>
@@ -377,7 +393,9 @@ function MarketingPage() {
                       <p className="text-[10px] text-muted-foreground">SQL</p>
                     </div>
                     <div>
-                      <p className="font-display text-sm font-semibold text-success">{s.converted}</p>
+                      <p className="font-display text-sm font-semibold text-success">
+                        {s.converted}
+                      </p>
                       <p className="text-[10px] text-muted-foreground">Conv.</p>
                     </div>
                   </div>
