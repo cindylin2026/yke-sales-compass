@@ -12,7 +12,7 @@
 import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { createSeedDatabase } from "./seed";
+import { createSeedDatabase, dayOffset } from "./seed";
 import type {
   Account,
   Contact,
@@ -26,6 +26,7 @@ import type {
   LeadLifecycleStage,
   Opportunity,
   Task,
+  TaskType,
   User,
 } from "./types";
 import {
@@ -54,6 +55,18 @@ import {
 import { useAuth } from "@/lib/auth/context";
 
 export const CRM_QUERY_KEY = ["crm-snapshot"] as const;
+
+// What a rep should do next when a lead enters each stage. Converted and
+// Disqualified are terminal/handled elsewhere (convert_lead already creates
+// its own task), so they intentionally have no entry here.
+const LEAD_STAGE_FOLLOW_UP: Partial<
+  Record<LeadLifecycleStage, { title: string; type: TaskType; dueInDays: number }>
+> = {
+  New: { title: "Qualify lead — make initial contact", type: "Call", dueInDays: 2 },
+  MQL: { title: "Complete site-fit scoring", type: "Follow-up", dueInDays: 2 },
+  SAL: { title: "Schedule demo / discovery call", type: "Demo", dueInDays: 3 },
+  SQL: { title: "Prepare proposal and move toward conversion", type: "Send Proposal", dueInDays: 3 },
+};
 
 // ── Fallback to seed data when not authenticated / Supabase not connected ──
 const SEED_DB = createSeedDatabase();
@@ -222,6 +235,19 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       });
       dbUpdateLeadStage(leadId, stage, note, disqualifyReason)
         .then(() => dbCompleteOpenTasksFor({ leadId }))
+        .then(() => {
+          const followUp = LEAD_STAGE_FOLLOW_UP[stage];
+          if (!followUp) return;
+          return dbCreateTask({
+            title: followUp.title,
+            type: followUp.type,
+            owner_user_id: currentUser.id,
+            lead_id: leadId,
+            due_date: dayOffset(followUp.dueInDays),
+            status: "Open",
+            priority: "Normal",
+          });
+        })
         .then(invalidate)
         .catch((e: Error) => {
           toast.error("Failed to update stage", { description: e.message });
