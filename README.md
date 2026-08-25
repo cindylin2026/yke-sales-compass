@@ -1,934 +1,116 @@
 # YKE Sales Compass
 
-I want to build a custom CRM / Sales Operating System for Yo-Kai Express (YKE), a global food-tech company.
+The sales CRM for Yo-Kai Express — leads, accounts, contacts, opportunities, and the follow-up tasks that tie them together. TanStack Start on Supabase, deployed on Vercel, auto-deploying from `main`.
 
-This is NOT intended to be a generic Salesforce clone. It should be designed around a real sales workflow that our US and Asia teams can actually use.
+- **Production:** https://yke-sales-compass.vercel.app
+- **Repo:** https://github.com/cindylin2026/yke-sales-compass
 
-IMPORTANT:
+## Stack
 
-- Build the frontend and product experience first.
+| Layer | What it is |
+|---|---|
+| Language | TypeScript |
+| Frontend framework | React 19 |
+| App framework | TanStack Start — file-based routing + server-side rendering |
+| Build tool | Vite 8 + Nitro |
+| Database + backend | Supabase (Postgres, Auth, Row-Level Security) |
+| Styling | Tailwind CSS |
+| UI components | Radix UI |
+| Data fetching / caching | TanStack Query |
+| Charts | Recharts |
+| Forms | react-hook-form |
+| Package manager | bun |
+| Hosting | Vercel — auto-deploys on push to `main` |
 
-- Do NOT use Google Sheets as the UI.
+## Getting access
 
-- The eventual source of truth will be a relational PostgreSQL database (likely Supabase), but for now focus on the frontend, UX, data model assumptions, and workflows.
+Do these in order — later steps depend on earlier ones.
 
-- The system should be designed so the backend/database can be connected later without rebuilding the frontend.
+1. **GitHub** — get added as a collaborator on the repo (Settings → Collaborators and teams → Add people).
 
-- Make the UI production-quality, clean, modern, and simple enough for non-technical sales users.
+   Before your first push, set your local git email to a verified GitHub email:
+   ```sh
+   git config user.email "you@example.com"
+   ```
+   Vercel silently blocks a deploy if the commit author email doesn't match a verified GitHub address. See the incident log below.
 
-==================================================
+2. **Vercel** — the `yke` team is on the Hobby plan, which caps membership at one seat. It needs to be upgraded to Pro before a second person can be invited as a team member (vercel.com/teams/yke/settings/members). Once you're in, you can pull env vars yourself with the CLI instead of copy-pasting secrets.
 
-1. CORE CRM DATA MODEL
+3. **Supabase** — get invited to the project from the Supabase dashboard (Project Settings → Team). You'll want this for running migrations and reading data directly when debugging.
 
-==================================================
+4. **Local secrets** — once you have Vercel access, run `vercel link` then `vercel env pull .env.local` in the repo root. That's the whole setup — no secrets need to travel over chat or email.
 
-The system should have these core objects:
-
-1. Accounts
-
-2. Leads
-
-3. Contacts
-
-4. Opportunities
-
-5. Interactions / Activities
-
-6. Tasks / Follow-ups
-
-7. Users
-
-8. Campaigns
-
-Relationships:
-
-Account
-
- ├── Contacts
-
- ├── Leads
-
- ├── Opportunities
-
- └── Interactions
-
-Lead
-
- ├── can originate from Wix, events, social media, referrals, outbound, etc.
-
- ├── has a lifecycle stage
-
- ├── can be assigned to a sales owner
-
- └── can be converted into an existing or new Account + Contact + Opportunity
-
-Opportunity
-
- ├── belongs to an Account
-
- ├── can have a primary Contact
-
- ├── has a sales stage
-
- ├── has value / probability / expected close date
-
- └── has Activities / Tasks
-
-Interactions
-
- ├── can be associated with Lead
-
- ├── Account
-
- ├── Contact
-
- └── Opportunity
-
-Do NOT treat these as separate disconnected spreadsheets.
-
-The UI should feel like one unified system.
-
-==================================================
-
-2. LEAD LIFECYCLE
-
-==================================================
-
-The CRM should support this lifecycle:
-
-New
-
-→ MQL
-
-→ SAL
-
-→ SQL
-
-→ Converted
-
-Definitions:
-
-New:
-
-A new prospect has entered the system but has not been qualified.
-
-MQL:
-
-Marketing has determined that the prospect is worth Sales reviewing.
-
-SAL:
-
-Sales has accepted the lead and is responsible for following up.
-
-SQL:
-
-Sales has qualified the prospect and confirmed meaningful business potential.
-
-Converted:
-
-The lead has been converted into an Account / Contact and, when appropriate, an Opportunity.
-
-IMPORTANT:
-
-MQL, SAL, and SQL are lifecycle stages/statuses of a Lead.
-
-They should NOT be separate database tables.
-
-==================================================
-
-3. LEAD CONVERSION
-
-==================================================
-
-This is one of the most important workflows.
-
-Create a clear "Convert Lead" action.
-
-When a Sales user clicks "Convert Lead":
-
-1. Search for an existing Account using company name / domain / other identifiers.
-
-2. If Account exists, link the Lead to the existing Account.
-
-3. If Account does not exist, create a new Account.
-
-4. Search for an existing Contact using email / name / account.
-
-5. If Contact exists, link the Lead to the existing Contact.
-
-6. If Contact does not exist, create a new Contact.
-
-7. Give the user the option to create an Opportunity.
-
-8. Link the Opportunity to the Account and Contact.
-
-9. Mark the original Lead as Converted.
-
-10. Preserve the original Lead record and its source information.
-
-NEVER require the user to manually copy information between tables.
-
-The Lead should retain:
-
-- Lead ID
-
-- Source
-
-- Campaign
-
-- Original created date
-
-- Lifecycle history
-
-- Converted Account ID
-
-- Converted Contact ID
-
-- Opportunity ID if created
-
-The goal is to reproduce the feeling of Salesforce-style lead conversion without copying or deleting records manually.
-
-==================================================
-
-4. LEAD SOURCES
-
-==================================================
-
-Leads can come from:
-
-- Wix website inquiry
-
-- Event registration
-
-- Trade shows
-
-- LinkedIn
-
-- Instagram / social media
-
-- Referral
-
-- Partner
-
-- Outbound sales
-
-- Manual entry
-
-- Other marketing campaigns
-
-Every Lead should have:
-
-- Source
-
-- Source Detail
-
-- Campaign
-
-- Created Date
-
-Do NOT automatically create a Lead for passive social activity such as likes or follows.
-
-A Lead should generally represent meaningful commercial interest.
-
-==================================================
-
-5. ACCOUNT SCORING
-
-==================================================
-
-The existing YKE system already has an Account scoring model.
-
-Preserve this concept.
-
-The Account should have an "Account Fit Score".
-
-This represents:
-
-"How well does this company fit YKE's ideal customer profile?"
-
-This is different from Lead qualification.
-
-Lead Score:
-
-"How qualified / actionable is this specific prospect?"
-
-Account Fit Score:
-
-"How attractive is this company as a target account?"
-
-Make these visually distinct.
-
-==================================================
-
-6. SALES HOME / DAILY WORKSPACE
-
-==================================================
-
-The Sales user's homepage should NOT look like a spreadsheet.
-
-It should answer:
-
-"What do I need to do today?"
-
-Create a Sales Home dashboard with:
-
-- Overdue Follow-ups
-
-- Due Today
-
-- Upcoming Tasks
-
-- New Leads
-
-- High Priority Leads
-
-- My Opportunities
-
-- Pipeline Value
-
-- Recent Activity
-
-Example:
-
-GOOD MORNING, CINDY
-
-Overdue
-
-3
-
-Due Today
-
-7
-
-New Leads
-
-4
-
-High Priority
-
-5
-
-My Pipeline
-
-$420K
-
-Then show actionable lists.
-
-==================================================
-
-7. FOLLOW-UP SYSTEM
-
-==================================================
-
-Tasks should include:
-
-- Task ID
-
-- Owner
-
-- Related Lead
-
-- Related Account
-
-- Related Contact
-
-- Related Opportunity
-
-- Task Type
-
-- Due Date
-
-- Status
-
-- Next Action
-
-Task types can include:
-
-- Call
-
-- Email
-
-- Meeting
-
-- Follow-up
-
-- Send Proposal
-
-- Demo
-
-- Other
-
-The system should automatically surface:
-
-- Overdue
-
-- Due Today
-
-- Upcoming
-
-A sales rep should be able to complete a task directly from the dashboard.
-
-==================================================
-
-8. INTERACTION / ACTIVITY LOG
-
-==================================================
-
-The existing YKE CRM already has an Interaction Log.
-
-Preserve this concept.
-
-Interactions can include:
-
-- Email
-
-- Call
-
-- Meeting
-
-- Demo
-
-- LinkedIn
-
-- Event
-
-- Other
-
-Each Interaction should support:
-
-- Date
-
-- Owner
-
-- Related Account
-
-- Related Contact
-
-- Related Lead
-
-- Related Opportunity
-
-- Notes
-
-- Next Steps
-
-- Next Action
-
-- Due Date
-
-The existing system also uses Gemini to summarize meeting notes from a Google Doc.
-
-Design the UI so an interaction can eventually support:
-
-Google Doc URL
-
-→ AI Summary
-
-→ Notes
-
-→ Next Steps
-
-→ Next Action
-
-→ Due Date
-
-For now, build the UI and workflow assuming this AI integration will be connected later.
-
-==================================================
-
-9. ACCOUNT DETAIL PAGE
-
-==================================================
-
-Create a powerful Account 360 page.
-
-Example:
-
-ABC HOTEL
-
-Account Fit Score: 92
-
-Region: US
-
-Owner: Cindy
-
-Status: Active Prospect
-
-Contacts
-
-- John Smith — VP Operations
-
-- Sarah Chen — F&B Director
-
-Open Opportunities
-
-- $80K — Proposal
-
-- $30K — Discovery
-
-Recent Activities
-
-- Aug 17 — Meeting
-
-- Aug 15 — Email
-
-- Aug 12 — Call
-
-Next Follow-ups
-
-- Send proposal — Aug 19
-
-- Follow up with John — Aug 21
-
-The user should be able to navigate naturally between Account → Contact → Opportunity → Activity.
-
-==================================================
-
-10. OPPORTUNITY PIPELINE
-
-==================================================
-
-Create a Pipeline view.
-
-Stages:
-
-Discovery
-
-→ Proposal
-
-→ Negotiation
-
-→ Won
-
-→ Lost
-
-Each Opportunity should display:
-
-- Account
-
-- Primary Contact
-
-- Owner
-
-- Stage
-
-- Amount
-
-- Probability
-
-- Expected Close Date
-
-- Next Action
-
-Create a Kanban-style pipeline view as well as a table view.
-
-==================================================
-
-11. MARKETING / LEAD FUNNEL
-
-==================================================
-
-Create a Marketing / Manager dashboard showing:
-
-Total Leads
-
-MQL
-
-SAL
-
-SQL
-
-Opportunities
-
-Won
-
-Example funnel:
-
-1,000 Leads
-
-↓
-
-320 MQL
-
-↓
-
-180 SAL
-
-↓
-
-95 SQL
-
-↓
-
-42 Opportunities
-
-↓
-
-12 Won
-
-Also show Lead Source performance:
-
-Wix
-
-Events
-
-LinkedIn
-
-Referral
-
-Outbound
-
-Social
-
-Metrics:
-
-- Lead volume
-
-- MQL conversion
-
-- SQL conversion
-
-- Opportunity conversion
-
-- Won conversion
-
-==================================================
-
-12. MANAGER DASHBOARD
-
-==================================================
-
-Managers should see the entire team's performance.
-
-Include:
-
-- Total Accounts
-
-- New Leads
-
-- MQL
-
-- SAL
-
-- SQL
-
-- Open Opportunities
-
-- Pipeline Value
-
-- Won Revenue
-
-- Lost Revenue
-
-- Conversion Rates
-
-Charts:
-
-- Lead funnel
-
-- Leads by source
-
-- Pipeline by stage
-
-- Pipeline by region
-
-- Pipeline by sales rep
-
-- Account Fit Score distribution
-
-- Won revenue by month
-
-Also highlight exceptions:
-
-- Overdue follow-ups
-
-- Leads not contacted within SLA
-
-- Opportunities with no next action
-
-- Opportunities past expected close date
-
-==================================================
-
-13. USERS / ROLE-BASED VIEWS
-
-==================================================
-
-The same underlying data should power different views.
-
-Roles:
-
-Sales Rep
-
-Manager
-
-Marketing
-
-Admin
-
-Sales Rep:
-
-- My Leads
-
-- My Accounts
-
-- My Contacts
-
-- My Opportunities
-
-- My Follow-ups
-
-Manager:
-
-- Team Leads
-
-- Team Pipeline
-
-- Team Activities
-
-- Dashboard
-
-- All Accounts
-
-Marketing:
-
-- Leads
-
-- Campaigns
-
-- Lead Sources
-
-- MQL performance
-
-Admin:
-
-- Full system access
-
-The data should remain centralized.
-
-Do NOT create separate copies of data for different teams.
-
-==================================================
-
-14. GLOBAL SEARCH
-
-==================================================
-
-Create a global search that can search:
-
-- Account
-
-- Contact
-
-- Lead
-
-- Opportunity
-
-Example:
-
-Search "Hilton"
-
-→ Hilton Account
-
-→ Related Contacts
-
-→ Related Leads
-
-→ Related Opportunities
-
-→ Recent Activities
-
-==================================================
-
-15. UX PRINCIPLES
-
-==================================================
-
-The product should feel:
-
-- Modern
-
-- Fast
-
-- Clean
-
-- Professional
-
-- Enterprise-ready
-
-- Easy for sales reps
-
-- Less complicated than Salesforce
-
-Avoid making it look like a spreadsheet.
-
-Use:
-
-- Clear cards
-
-- Tables where appropriate
-
-- Kanban pipeline
-
-- Timeline activity feed
-
-- Filters
-
-- Search
-
-- Status badges
-
-- Score indicators
-
-- Charts
-
-- Side navigation
-
-Prioritize usability over visual decoration.
-
-==================================================
-
-16. IMPORTANT PRODUCT PRINCIPLE
-
-==================================================
-
-This should be designed as a "Sales Operating System", not just a database.
-
-The core workflow is:
-
-Marketing / Inbound / Outbound
-
-→ Lead
-
-→ MQL
-
-→ SAL
-
-→ SQL
-
-→ Conversion
-
-→ Account + Contact + Opportunity
-
-→ Activities
-
-→ Follow-ups
-
-→ Won / Lost
-
-The most important question for Sales should always be:
-
-"What should I do next?"
-
-The most important question for Managers should be:
-
-"Where are our leads, pipeline, and revenue coming from, and what needs attention?"
-
-Build the frontend around these two questions.
-
-==================================================
-
-17. DATA / BACKEND PREPARATION
-
-==================================================
-
-Even though the first version is frontend-focused, structure the application so that the following PostgreSQL/Supabase tables can be connected later:
-
-accounts
-
-leads
-
-contacts
-
-opportunities
-
-interactions
-
-tasks
-
-users
-
-campaigns
-
-Use stable IDs and explicit relationships.
-
-Do not hard-code fake relationships into the UI.
-
-Use realistic mock data for the prototype.
-
-The architecture should make it easy to replace mock data with Supabase/PostgreSQL later.
-
-==================================================
-
-18. FIRST VERSION PRIORITY
-
-==================================================
-
-Do NOT try to build every integration immediately.
-
-First make these workflows work perfectly in the prototype:
-
-1. Sales Home
-
-2. Leads
-
-3. Lead Detail
-
-4. MQL → SAL → SQL
-
-5. Convert Lead
-
-6. Account 360
-
-7. Contacts
-
-8. Opportunities
-
-9. Interaction Timeline
-
-10. Today's Follow-ups
-
-11. Manager Dashboard
-
-After these workflows are stable, we will add:
-
-- Wix integration
-
-- Event registration integration
-
-- LinkedIn Lead Gen
-
-- Social integrations
-
-- Gemini
-
-- Google Sheets sync
-
-- Email/calendar integrations
-
-- Automated lead scoring
-
-- Automated assignment
-
-The product should be architected so these integrations can be added later without changing the core data model.
-
-This project was built with [Lovable](https://lovable.dev).
-
-## Build with Lovable
-
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/99884665-f2a9-4f02-b109-938b62f0e766).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
-
-## Development
-
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+## Running it locally
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
+# after env vars are pulled (step 4 above)
+git clone https://github.com/cindylin2026/yke-sales-compass.git
+cd yke-sales-compass
+npm install
 npm run dev
+# → http://localhost:8080
 ```
+
+To work without touching real Supabase auth, set `VITE_AUTH_REQUIRED=false` in `.env.local` — the app falls back to an in-memory seed database so you can click around without signing in. Flip it back to `true` before you're done; it's what production runs.
+
+## Environment variables
+
+| Name | Where it's read | What it's for |
+|---|---|---|
+| `VITE_SUPABASE_URL` | client + server | Supabase project URL. Safe to expose — RLS does the real gatekeeping. |
+| `VITE_SUPABASE_ANON_KEY` | client + server | Public anon key. Also safe to expose, also RLS-gated. |
+| `SUPABASE_SERVICE_ROLE_KEY` | server only | Bypasses RLS entirely. Deliberately not `VITE_`-prefixed so it never reaches the browser bundle. Only ever touched inside `src/lib/supabase/admin.ts`, which handles the "invite team member" flow. Treat it like a master key. |
+| `SUPABASE_PROJECT_REF` | — | Not read anywhere in the app code. Kept around for manual Supabase CLI commands only. |
+| `VITE_AUTH_REQUIRED` | client | `false` bypasses Supabase auth and uses seed data — local dev convenience only. Must be `true` in production. |
+
+> **Sharp edge:** on Vercel, all five of these are marked `Sensitive`, which means their values can't be viewed again once saved — only overwritten. A bad paste (empty, truncated, stray whitespace) is invisible until something that depends on it breaks in production. If a feature fails with a "Supabase not configured" style error and the variable clearly exists in the dashboard, don't trust that it's correct — delete and re-add it with a fresh copy-paste before looking anywhere else.
+
+## How it's built
+
+No separate backend — Supabase *is* the backend, and RLS policies are the real authorization boundary (client-side role checks are UX only, not security).
+
+**Where things live:**
+
+- `src/routes/` — one file per page, TanStack Start's file-based router
+- `src/lib/crm/provider.tsx` — the whole app's data layer: one snapshot query, every mutation invalidates it
+- `src/lib/crm/selectors.ts` — derived calculations, incl. the opportunity pricing formula
+- `src/lib/crm/types.ts` — domain types: regions, segments, stages, roles
+- `src/lib/supabase/repository.ts` — every direct Supabase call lives here
+- `src/lib/supabase/admin.ts` — the only file allowed to touch the service-role key
+- `src/server.ts` — custom SSR entry; catches crashes and renders a friendly error page instead of a blank 500
+- `supabase/migrations/` — numbered SQL migrations, run by hand in the Supabase SQL Editor (no CLI runner wired up)
+
+**Business logic worth knowing before you touch it:**
+
+- **Opportunity pricing** (`selectors.ts`) — a 36-month base licensing fee per machine, plus a low/high projected-revenue range from real YKE menu pricing (boba $5.50–7.00, ramen $12.99–14.99) × rep-entered daily unit estimates × the account's operating days/year. It's gross revenue only — there's no cost/margin field anywhere in the schema yet.
+- **Regions & segments** (`types.ts`) — 8 regions (North America / Europe / UK / Australia / North Asia / Southeast Asia / Taiwan / Unknown) and a 12-value segment list, both hand-verified against real account data by email domain, not guessed.
+- **Roles** — `sales_rep | manager | marketing | admin`. Enforced twice: client-side in `AppShell.tsx` (nav visibility + silent redirect off restricted routes) and server-side via Postgres RLS policies (`auth_role()`, `auth_region()` helper functions). If the two ever disagree, the RLS policy is the one actually enforcing anything.
+
+## Deploying
+
+Push to `main` → Vercel's GitHub integration builds and deploys automatically. No manual step, no staging environment — production has been shipped to directly.
+
+```sh
+git add <files>
+git commit -m "..."
+git push origin main
+# Vercel picks it up within seconds — check vercel.com/yke/yke-sales-compass/deployments
+```
+
+Nitro (the build tool underneath Vite) auto-detects Vercel and outputs its Build Output API format directly — this has been confirmed working correctly, so if a deploy misbehaves, look at env vars and commit metadata before suspecting the build target.
+
+## Incident log
+
+Two real outages so far, both after moving off Lovable's hosting onto independent Vercel deploys. Worth reading before debugging a deploy that "should just work."
+
+**2026-08-20 — Production threw "Missing Supabase environment variables" on every request.**
+All four Supabase env vars were correctly named and scoped in the Vercel dashboard, and a fresh, non-cached build succeeded — yet the deployed bundle still had no values. Root cause: the stored *value* on a `Sensitive`-flagged variable was bad from an earlier paste, and Sensitive values can't be inspected after creation to catch that.
+*Fix — delete and recreate the variable with a careful fresh paste, then redeploy.*
+
+**2026-08-21 — Deploy status showed "Blocked," site never updated.**
+Vercel's own error message pointed at team billing ("upgrade to Pro and add them as a collaborator"), which was a red herring — the team only has one member, who owns everything. The actual cause: the local git commit author email wasn't a verified email on the pushing GitHub account, so Vercel couldn't authorize the deploy.
+*Fix — set the correct `git config user.email` to a verified GitHub email, amend the commit, push again.*
+
+## Questions
+
+Cindy — cindy.lin@yokaiexpress.com
