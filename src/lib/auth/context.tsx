@@ -11,7 +11,9 @@ import {
   type ReactNode,
 } from "react";
 import type { Session, User as SupabaseUser } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabase/client";
+import { supabase, authLinkType } from "@/lib/supabase/client";
+
+const IS_INVITE_OR_RECOVERY_LINK = authLinkType === "invite" || authLinkType === "recovery";
 import type { User } from "@/lib/crm/types";
 
 interface AuthContextValue {
@@ -66,6 +68,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Get initial session
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       setSession(s);
+      if (s?.user && IS_INVITE_OR_RECOVERY_LINK) {
+        setNeedsPasswordSetup(true);
+      }
       if (s?.user) {
         loadProfile(s.user.id).finally(() => setLoading(false));
       } else {
@@ -77,7 +82,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, s) => {
         setSession(s);
-        if (event === "PASSWORD_RECOVERY") {
+        // Supabase only reliably fires "PASSWORD_RECOVERY" for type=recovery
+        // links — an invite link arrives as a plain "SIGNED_IN" event, so we
+        // also fall back to the hash `type` snapshotted at module load.
+        if (event === "PASSWORD_RECOVERY" || (s?.user && IS_INVITE_OR_RECOVERY_LINK)) {
           setNeedsPasswordSetup(true);
         }
         if (s?.user) {

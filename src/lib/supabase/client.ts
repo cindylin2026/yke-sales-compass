@@ -22,3 +22,14 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, 
     detectSessionInUrl: true,
   },
 });
+
+// Supabase's `detectSessionInUrl` consumes and strips the URL hash almost
+// immediately, and only fires the "PASSWORD_RECOVERY" auth event for
+// type=recovery links — an invite link lands as a plain "SIGNED_IN" event
+// with no way to tell it apart after the fact. Snapshot the hash's `type`
+// param at module load (before anything strips it) so callers can still
+// tell "this session just arrived via an invite/recovery link" afterward.
+export const authLinkType =
+  typeof window !== "undefined"
+    ? new URLSearchParams(window.location.hash.replace(/^#/, "")).get("type")
+    : null;
