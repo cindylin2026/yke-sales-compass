@@ -166,15 +166,34 @@ function AuthGuard({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/** Redirects to /set-password whenever a session just arrived via an
+ *  invite/recovery link and the user hasn't chosen a password yet —
+ *  runs regardless of which branch below is currently rendering. */
+function PasswordSetupGuard() {
+  const { needsPasswordSetup } = useAuth();
+  const navigate = useNavigate();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+
+  useEffect(() => {
+    if (needsPasswordSetup && pathname !== "/set-password") {
+      void navigate({ to: "/set-password" });
+    }
+  }, [needsPasswordSetup, pathname, navigate]);
+
+  return null;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isLoginPage = pathname === "/login";
+  const isSetPasswordPage = pathname === "/set-password";
 
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        {isLoginPage ? (
+        <PasswordSetupGuard />
+        {isLoginPage || isSetPasswordPage ? (
           <>
             <Outlet />
             <Toaster />

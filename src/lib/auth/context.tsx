@@ -19,6 +19,10 @@ interface AuthContextValue {
   supabaseUser: SupabaseUser | null;
   profile: User | null;
   loading: boolean;
+  /** True right after landing here via an invite/recovery email link —
+   *  the session exists but the user has never set a password yet. */
+  needsPasswordSetup: boolean;
+  clearPasswordSetup: () => void;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
@@ -29,6 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
 
   const loadProfile = useCallback(async (userId: string) => {
     const { data } = await supabase
@@ -70,8 +75,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, s) => {
+      (event, s) => {
         setSession(s);
+        if (event === "PASSWORD_RECOVERY") {
+          setNeedsPasswordSetup(true);
+        }
         if (s?.user) {
           loadProfile(s.user.id);
         } else {
@@ -97,6 +105,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null);
   }, []);
 
+  const clearPasswordSetup = useCallback(() => setNeedsPasswordSetup(false), []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -104,6 +114,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         supabaseUser: session?.user ?? null,
         profile,
         loading,
+        needsPasswordSetup,
+        clearPasswordSetup,
         signIn,
         signOut,
       }}

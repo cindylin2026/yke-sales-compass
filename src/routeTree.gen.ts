@@ -14,6 +14,7 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as InteractionsRouteImport } from './routes/interactions'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as MarketingRouteImport } from './routes/marketing'
+import { Route as SetPasswordRouteImport } from './routes/set-password'
 import { Route as TasksRouteImport } from './routes/tasks'
 import { Route as TeamRouteImport } from './routes/team'
 import { Route as AccountsIndexRouteImport } from './routes/accounts.index'
@@ -52,6 +53,11 @@ const LoginRoute = LoginRouteImport.update({
 const MarketingRoute = MarketingRouteImport.update({
   id: '/marketing',
   path: '/marketing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SetPasswordRoute = SetPasswordRouteImport.update({
+  id: '/set-password',
+  path: '/set-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TasksRoute = TasksRouteImport.update({
@@ -132,6 +138,7 @@ export interface FileRoutesByFullPath {
   '/interactions': typeof InteractionsRoute
   '/login': typeof LoginRoute
   '/marketing': typeof MarketingRoute
+  '/set-password': typeof SetPasswordRoute
   '/tasks': typeof TasksRoute
   '/team': typeof TeamRoute
   '/accounts/$accountId': typeof AccountsAccountIdRoute
@@ -153,6 +160,7 @@ export interface FileRoutesByTo {
   '/interactions': typeof InteractionsRoute
   '/login': typeof LoginRoute
   '/marketing': typeof MarketingRoute
+  '/set-password': typeof SetPasswordRoute
   '/tasks': typeof TasksRoute
   '/team': typeof TeamRoute
   '/accounts/$accountId': typeof AccountsAccountIdRoute
@@ -175,6 +183,7 @@ export interface FileRoutesById {
   '/interactions': typeof InteractionsRoute
   '/login': typeof LoginRoute
   '/marketing': typeof MarketingRoute
+  '/set-password': typeof SetPasswordRoute
   '/tasks': typeof TasksRoute
   '/team': typeof TeamRoute
   '/accounts/$accountId': typeof AccountsAccountIdRoute
@@ -198,6 +207,7 @@ export interface FileRouteTypes {
     | '/interactions'
     | '/login'
     | '/marketing'
+    | '/set-password'
     | '/tasks'
     | '/team'
     | '/accounts/$accountId'
@@ -219,6 +229,7 @@ export interface FileRouteTypes {
     | '/interactions'
     | '/login'
     | '/marketing'
+    | '/set-password'
     | '/tasks'
     | '/team'
     | '/accounts/$accountId'
@@ -240,6 +251,7 @@ export interface FileRouteTypes {
     | '/interactions'
     | '/login'
     | '/marketing'
+    | '/set-password'
     | '/tasks'
     | '/team'
     | '/accounts/$accountId'
@@ -262,6 +274,7 @@ export interface RootRouteChildren {
   InteractionsRoute: typeof InteractionsRoute
   LoginRoute: typeof LoginRoute
   MarketingRoute: typeof MarketingRoute
+  SetPasswordRoute: typeof SetPasswordRoute
   TasksRoute: typeof TasksRoute
   TeamRoute: typeof TeamRoute
   AccountsAccountIdRoute: typeof AccountsAccountIdRoute
@@ -313,6 +326,13 @@ declare module '@tanstack/react-router' {
       path: '/marketing'
       fullPath: '/marketing'
       preLoaderRoute: typeof MarketingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/set-password': {
+      id: '/set-password'
+      path: '/set-password'
+      fullPath: '/set-password'
+      preLoaderRoute: typeof SetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/tasks': {
@@ -422,6 +442,7 @@ const rootRouteChildren: RootRouteChildren = {
   InteractionsRoute: InteractionsRoute,
   LoginRoute: LoginRoute,
   MarketingRoute: MarketingRoute,
+  SetPasswordRoute: SetPasswordRoute,
   TasksRoute: TasksRoute,
   TeamRoute: TeamRoute,
   AccountsAccountIdRoute: AccountsAccountIdRoute,
