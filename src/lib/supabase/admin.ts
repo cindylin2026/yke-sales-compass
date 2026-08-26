@@ -76,3 +76,58 @@ export const inviteTeamMember = createServerFn({ method: "POST" })
 
     return { id: invited.user.id };
   });
+
+interface RemoveTeamMemberInput {
+  accessToken: string;
+  userId: string;
+}
+
+export const removeTeamMember = createServerFn({ method: "POST" })
+  .validator((data: RemoveTeamMemberInput) => data)
+  .handler(async ({ data }) => {
+    const url = process.env["VITE_SUPABASE_URL"];
+    const anonKey = process.env["VITE_SUPABASE_ANON_KEY"];
+    const serviceKey = process.env["SUPABASE_SERVICE_ROLE_KEY"];
+    if (!url || !anonKey || !serviceKey) {
+      throw new Error("Supabase server environment variables are not configured.");
+    }
+
+    const callerClient = createClient<Database>(url, anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { headers: { Authorization: `Bearer ${data.accessToken}` } },
+    });
+
+    const { data: authData, error: authError } = await callerClient.auth.getUser(data.accessToken);
+    if (authError || !authData.user) {
+      throw new Error("Not authenticated.");
+    }
+
+    const { data: callerProfile, error: profileError } = await callerClient
+      .from("profiles")
+      .select("role")
+      .eq("id", authData.user.id)
+      .single();
+    if (profileError || !callerProfile) {
+      throw new Error("Could not verify caller profile.");
+    }
+    if (callerProfile.role !== "admin") {
+      throw new Error("Only admins can remove team members.");
+    }
+    if (data.userId === authData.user.id) {
+      throw new Error("You can't remove your own account.");
+    }
+
+    // Elevated client — deleting the auth user cascades to the profiles row
+    // (profiles.id references auth.users(id) on delete cascade), so there's
+    // nothing further to clean up here.
+    const adminClient = createClient<Database>(url, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    const { error: deleteError } = await adminClient.auth.admin.deleteUser(data.userId);
+    if (deleteError) {
+      throw new Error(deleteError.message);
+    }
+
+    return { id: data.userId };
+  });

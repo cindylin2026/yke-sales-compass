@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { PageHeader, Panel, StatCard } from "@/components/crm/ui-bits";
 import { InviteUserDialog, ROLE_LABELS } from "@/components/crm/InviteUserDialog";
+import { RemoveTeamMemberDialog } from "@/components/crm/RemoveTeamMemberDialog";
 import { useCrm } from "@/lib/crm/provider";
 import { REGIONS, USER_ROLES, type Region, type UserRole } from "@/lib/crm/types";
 
@@ -86,6 +87,9 @@ function TeamPage() {
                 <th className="px-4 py-2.5 text-left font-medium">Role</th>
                 <th className="px-4 py-2.5 text-left font-medium">Region</th>
                 <th className="px-4 py-2.5 text-left font-medium">Active</th>
+                <th className="px-4 py-2.5 text-left font-medium">
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -146,6 +150,9 @@ function TeamPage() {
                         disabled={isSelf || saving}
                         onCheckedChange={(checked) => void handleUpdate(u.id, { active: checked })}
                       />
+                    </td>
+                    <td className="px-4 py-2.5">
+                      {!isSelf && <RemoveTeamMemberDialog userId={u.id} userName={u.full_name} />}
                     </td>
                   </tr>
                 );
